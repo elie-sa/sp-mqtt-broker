@@ -1,6 +1,6 @@
 namespace SPBackend.Models;
 
-public class Mains
+public class MainsLog
 {
     public long Id { get; set; }
     public DateTime Time { get; set; }
@@ -8,4 +8,6 @@ public class Mains
     public long Amperage { get; set; }
     public long PowerSourceId { get; set; }
     public PowerSource PowerSource { get; set; }
+    public long HouseholdId { get; set; }
+    public Household Household { get; set; }
 }

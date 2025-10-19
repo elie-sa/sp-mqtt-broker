@@ -1,11 +1,12 @@
+using System.Security.Cryptography.X509Certificates;
+
 namespace SPBackend.Models;
 
-public class PowerSource
+public class Room
 {
     public long Id { get; set; }
     public string Name { get; set; }
-    public long MaxCapacity { get; set; }
     public long HouseholdId { get; set; }
     public Household Household { get; set; }
-    public ICollection<MainsLog> Mains { get; set; }
+    public ICollection<Plug> Plugs { get; set; }
 }
