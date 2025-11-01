@@ -27,6 +27,14 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 // Controller Services
 builder.Services.AddScoped<PowerSourceService>();
 
+// Allow all frontend endpoints
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
 
 var app = builder.Build();
 
@@ -48,10 +56,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+app.UseCors("AllowAll");
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 }
+
 
 app.Run();
