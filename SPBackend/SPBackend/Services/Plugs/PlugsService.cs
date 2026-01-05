@@ -1,10 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using SPBackend.Commands.AddTimeout;
+using SPBackend.Commands.DeleteTimeout;
 using SPBackend.Commands.RemovePlugFromSchedule;
 using SPBackend.Commands.SetPlug;
 using SPBackend.Commands.SetPlugName;
 using SPBackend.Data;
 using SPBackend.DTOs;
 using SPBackend.Queries.GetPlugDetails;
+using SPBackend.Queries.GetScheduleDetails;
+using SPBackend.Queries.GetSchedules;
 using SPBackend.Services.CurrentUser;
 using SPBackend.Services.MQTTService;
 
@@ -101,6 +105,102 @@ public class PlugsService
         plug.Name = request.Name;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return new SetPlugNameResponse(){ Message = $"Plug name successfully changed to ${request.Name}" };
+    }
+
+    public async Task<AddTimeoutResponse> AddTimeout(AddTimeoutRequest request, CancellationToken cancellationToken)
+    {
+        var plug = _dbContext.Plugs.FirstOrDefault(x => x.Id.Equals(request.PlugId));
+        if (plug == null) throw new KeyNotFoundException("No plug was found");
+        
+        plug.Timeout = request.Timeout;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new AddTimeoutResponse() { Message = $"Successfully added timeout of {plug.Timeout} to plug {plug.Id}" };
+    }
+    
+    public async Task<DeleteTimeoutResponse> DeleteTimeout(long plugId, CancellationToken cancellationToken)
+    {
+        var plug = _dbContext.Plugs.FirstOrDefault(x => x.Id.Equals(plugId));
+        if (plug == null) throw new KeyNotFoundException("No plug was found");
+        
+        plug.Timeout = null;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new DeleteTimeoutResponse() { Message = $"Successfully added timeout of {plug.Timeout} to plug {plug.Id}" };
+    }
+
+    public async Task<GetSchedulesResponse> GetSchedules(CancellationToken cancellationToken, int page = 1, int pageSize = 20)
+    {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize < 1 ? 20 : pageSize;
+        if (pageSize > 100) pageSize = 100;
+        
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken: cancellationToken); 
+
+        var query =
+            _dbContext.Schedules
+                .AsNoTracking()
+                .Where(s =>
+                    s.PlugControls.Any(pc =>
+                        pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id)
+                    ))
+                .OrderBy(s => s.Time);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var schedules = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(s => new ScheduleDto()
+            {
+                Id = s.Id,
+                Name = s.Name,
+                Time = s.Time,
+                DeviceCount = s.PlugControls.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        return new GetSchedulesResponse()
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
+            Schedules = schedules
+        };
+    }
+
+    public async Task<GetScheduleDetailsResponse> GetScheduleDetails(GetScheduleDetailsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var schedule = await _dbContext.Schedules.Include(x => x.PlugControls).ThenInclude(y => y.Plug).FirstOrDefaultAsync(x => x.Id == request.ScheduleId, cancellationToken);
+        if (schedule == null) throw new KeyNotFoundException("No plug was found");
+
+        var onPlugs = schedule.PlugControls.Where(x => x.SetStatus == true).ToList();
+        var offPlugs = schedule.PlugControls.Where(x => x.SetStatus == false).ToList();
+        
+        var response = new GetScheduleDetailsResponse()
+        {
+            Id = schedule.Id,
+            Name = schedule.Name,
+            Time = schedule.Time
+        };
+        
+        response.OnPlugs.AddRange(onPlugs.Select(x => new ScheduleDeviceDto()
+        {
+            Id = x.PlugId,
+            Name = x.Plug.Name,
+            IsOn = x.Plug.IsOn
+        }));
+        
+        response.OffPlugs.AddRange(offPlugs.Select(x => new ScheduleDeviceDto()
+        {
+            Id = x.PlugId,
+            Name = x.Plug.Name,
+            IsOn = x.Plug.IsOn
+        }));
+        
+        return response;
     }
     
 }

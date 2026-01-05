@@ -6,4 +6,5 @@ public class Household
     public string Name { get; set; }
     public ICollection<PowerSource> PowerSources { get; set; }
     public ICollection<Room> Rooms { get; set; }
+    public ICollection<User> Users { get; set; }
 }

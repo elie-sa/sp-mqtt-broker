@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SPBackend.Commands.AddTimeout;
+using SPBackend.Commands.DeleteTimeout;
 using SPBackend.Commands.RemovePlugFromSchedule;
 using SPBackend.Commands.SetPlug;
 using SPBackend.Commands.SetPlugName;
@@ -59,5 +61,18 @@ public class PlugController : ControllerBase
     {
         return Ok(await _mediator.Send(request, cancellationToken));
     }
-    
+
+    [Authorize]
+    [HttpPost("timeout")]
+    public async Task<IActionResult> SetPlugTimeout(AddTimeoutRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(request, cancellationToken));
+    }
+
+    [Authorize]
+    [HttpDelete("{plugId}/timeout")]
+    public async Task<IActionResult> DeletePlugTimeout(long plugId, CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(new DeleteTimeoutRequest(){PlugId = plugId}, cancellationToken));
+    }
 }

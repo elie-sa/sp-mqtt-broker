@@ -21,7 +21,7 @@ public class RoomsService
 
     public async Task<GetRoomsResponse> GetAllRooms(CancellationToken cancellationToken)
     {
-        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub)); 
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken: cancellationToken); 
         var rooms = await _dbContext.Rooms.Include(y => y.RoomType).Include(x => x.Plugs).Where(x => x.HouseholdId == user!.HouseholdId).ToListAsync();
         var totalRoomDetails = new GetRoomsResponse(){ Rooms = new List<RoomDetails>() };
 
