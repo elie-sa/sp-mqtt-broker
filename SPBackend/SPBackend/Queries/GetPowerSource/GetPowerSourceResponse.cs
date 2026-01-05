@@ -1,6 +1,6 @@
-namespace SPBackend.Views.Mains;
+namespace SPBackend.Queries.GetPowerSource;
 
-public class PowerSourceViewModel
+public class GetPowerSourceResponse
 {
     public long PowerSourceId { get; set; }
     public string Name { get; set; }

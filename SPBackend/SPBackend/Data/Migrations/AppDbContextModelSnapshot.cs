@@ -240,7 +240,7 @@ namespace SPBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("RoomType");
+                    b.ToTable("RoomTypes");
                 });
 
             modelBuilder.Entity("SPBackend.Models.Schedule", b =>

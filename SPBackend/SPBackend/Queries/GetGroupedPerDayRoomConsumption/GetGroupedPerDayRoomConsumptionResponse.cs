@@ -1,10 +1,9 @@
-namespace SPBackend.Views.Mains;
+namespace SPBackend.Queries.GetGroupedPerDayRoomConsumption;
 
-public class GroupedPerDayRoomConsumptionViewModel
+public class GetGroupedPerDayRoomConsumptionResponse
 {
     public List<GroupedRoomConsumption> GroupedRooms { get; set; }
 }
-
 public class GroupedRoomConsumption
 {
     public string RoomType { get; set; }

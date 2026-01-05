@@ -20,7 +20,7 @@ public class GlobalExceptionHandler: IExceptionHandler
                 Type = exception.GetType().Name,
                 Title = "An error occurred while processing your request",
                 Detail = exception.Message,
-            });
+            }, cancellationToken);
 
         return true;
     }

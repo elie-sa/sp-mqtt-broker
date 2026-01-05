@@ -15,4 +15,7 @@ public interface IAppDbContext
     public DbSet<Room> Rooms { get; set; }
     public DbSet<Schedule> Schedules { get; set; }
     public DbSet<User> Users { get; set; }
+    
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    int SaveChanges();
 }

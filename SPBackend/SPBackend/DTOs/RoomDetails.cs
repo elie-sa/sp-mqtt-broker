@@ -1,9 +1,4 @@
-namespace SPBackend.Views.Mains;
-
-public class TotalRoomDetails
-{
-    public List<RoomDetails> Rooms { get; set; }
-}
+namespace SPBackend.DTOs;
 
 public class RoomDetails
 {

@@ -2,28 +2,36 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
-using SPBackend.Views.Mains;
+using SPBackend.DTOs;
+using SPBackend.Queries.GetGroupedPerDayRoomConsumption;
+using SPBackend.Queries.GetPerDayRoomConsumption;
+using SPBackend.Queries.GetPlugsPerRoomOverview;
+using SPBackend.Queries.GetPowerSource;
+using SPBackend.Services.CurrentUser;
 
 namespace SPBackend.Services.Mains;
 
 public class PowerSourceService
 {
-    private readonly IAppDbContext _context;
+    private readonly IAppDbContext _dbContext;
+    private readonly ICurrentUser _currentUser;
 
-    public PowerSourceService(IAppDbContext context)
+    public PowerSourceService(IAppDbContext dbContext, ICurrentUser currentUser)
     {
-        _context = context;
+        _dbContext = dbContext;
+        _currentUser = currentUser;
     }
 
-    public async Task<PowerSourceViewModel> GetPowerSource(int householdId)
+    public async Task<GetPowerSourceResponse> GetPowerSource()
     {
-        var mainsLog = await _context.MainsLogs.Include(x => x.PowerSource).OrderByDescending(p => p.Time).FirstOrDefaultAsync(x => x.Household.Id == householdId);
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub));
+        var mainsLog = await _dbContext.MainsLogs.Include(x => x.PowerSource).OrderByDescending(p => p.Time).FirstOrDefaultAsync(x => x.HouseholdId.Equals(user.HouseholdId));
         if (mainsLog == null)
         {
             throw new KeyNotFoundException("The household id provided is invalid or no logs have been recorded yet.");
         }
         
-        return new PowerSourceViewModel()
+        return new GetPowerSourceResponse()
         {
             PowerSourceId = mainsLog.PowerSource.Id,
             Name = mainsLog.PowerSource.Name,
@@ -32,11 +40,12 @@ public class PowerSourceService
         };
     }
 
-    public async Task<GroupedPerDayRoomConsumptionViewModel> GetGroupedPerDayRoomConsumption(int householdId)
+    public async Task<GetGroupedPerDayRoomConsumptionResponse> GetGroupedPerDayRoomConsumption()
     {
-       var groupedPerDayRoomConsumption = new GroupedPerDayRoomConsumptionViewModel(){ GroupedRooms = new List<GroupedRoomConsumption>() };
-       var roomsPerRoomTypes = await _context.Rooms.Include(x => x.RoomType).Include(x => x.Plugs).ThenInclude(p => p.Consumptions)
-           .Where(x => x.HouseholdId == householdId).GroupBy(x => x.RoomType.Name).ToListAsync();
+       var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub)); 
+       var groupedPerDayRoomConsumption = new GetGroupedPerDayRoomConsumptionResponse(){ GroupedRooms = new List<GroupedRoomConsumption>() };
+       var roomsPerRoomTypes = await _dbContext.Rooms.Include(x => x.RoomType).Include(x => x.Plugs).ThenInclude(p => p.Consumptions)
+           .Where(x => x.HouseholdId == user!.HouseholdId).GroupBy(x => x.RoomType.Name).ToListAsync();
 
        foreach (var roomPerRoomType in roomsPerRoomTypes)
        {
@@ -54,10 +63,11 @@ public class PowerSourceService
     }
     
     
-    public async Task<PerDayRoomConsumptionViewModel> GetPerDayRoomConsumption(int householdId)
+    public async Task<GetPerDayRoomConsumptionResponse> GetPerDayRoomConsumption()
     {
-        var rooms = await _context.Rooms.Include(x => x.RoomType).Include(x => x.Plugs).ThenInclude(p => p.Consumptions).Where(x => x.HouseholdId == householdId).ToListAsync();
-        PerDayRoomConsumptionViewModel perDayRoomConsumption = new PerDayRoomConsumptionViewModel(){ Rooms = new List<RoomConsumption>()};
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub)); 
+        var rooms = await _dbContext.Rooms.Include(x => x.RoomType).Include(x => x.Plugs).ThenInclude(p => p.Consumptions).Where(x => x.HouseholdId == user!.HouseholdId).ToListAsync();
+        GetPerDayRoomConsumptionResponse perDayRoomConsumption = new GetPerDayRoomConsumptionResponse(){ Rooms = new List<RoomConsumption>()};
         
         foreach(var room in rooms)
         {
@@ -78,10 +88,11 @@ public class PowerSourceService
         return perDayRoomConsumption;
     }
 
-    public async Task<TotalRoomDetails> GetTotalRoomDetails(int householdId)
+    public async Task<GetPlugsPerRoomOverviewResponse> GetTotalRoomDetails()
     {
-        var rooms = await _context.Rooms.Include(y => y.RoomType).Include(x => x.Plugs).Where(x => x.HouseholdId == householdId).ToListAsync();
-        var totalRoomDetails = new TotalRoomDetails(){ Rooms = new List<RoomDetails>() };
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub)); 
+        var rooms = await _dbContext.Rooms.Include(y => y.RoomType).Include(x => x.Plugs).Where(x => x.HouseholdId == user!.HouseholdId).ToListAsync();
+        var totalRoomDetails = new GetPlugsPerRoomOverviewResponse(){ Rooms = new List<RoomDetails>() };
 
         foreach (var room in rooms)
         {

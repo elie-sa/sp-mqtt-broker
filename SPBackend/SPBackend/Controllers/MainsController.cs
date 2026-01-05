@@ -1,8 +1,11 @@
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using SPBackend.Data;
+using SPBackend.Queries.GetGroupedPerDayRoomConsumption;
+using SPBackend.Queries.GetPerDayRoomConsumption;
+using SPBackend.Queries.GetPlugsPerRoomOverview;
+using SPBackend.Queries.GetPowerSource;
 using SPBackend.Services.Mains;
-using SPBackend.Views.Mains;
 
 namespace SPBackend.Controllers;
 
@@ -10,41 +13,38 @@ namespace SPBackend.Controllers;
 [Route("mains")]
 public class MainsController: ControllerBase
 {
+    private readonly IMediator _mediator;
     private readonly PowerSourceService _powerSourceService;
 
-    public MainsController(PowerSourceService powerSourceService)
+    public MainsController(PowerSourceService powerSourceService, IMediator mediator)
     {
         _powerSourceService = powerSourceService;
+        _mediator = mediator;
     }
 
-    [HttpGet("{householdId}/source")]
-    public async Task<IActionResult> GetSource(int householdId)
+    [Authorize]
+    [HttpGet("source")]
+    public async Task<IActionResult> GetSource()
     {
-        var powerSourceDetails = await _powerSourceService.GetPowerSource(householdId);   
-        return Ok(powerSourceDetails);
+        return Ok(await _mediator.Send(new GetPowerSourceRequest()));
     }
     
-    [HttpGet("households/{householdId}/rooms/consumption/daily")]
-    public async Task<IActionResult> GetPerDayRoomsConsumptions(int householdId, [FromQuery] bool groupByRoomType = false)
+    [Authorize]
+    [HttpGet("rooms/consumption/daily")]
+    public async Task<IActionResult> GetPerDayRoomsConsumptions([FromQuery] bool groupByRoomType = false)
     {
         if (groupByRoomType)
         {
-            var groupedPerDayRoomConsumption = await _powerSourceService.GetGroupedPerDayRoomConsumption(householdId);
-            return Ok(groupedPerDayRoomConsumption);
+            return Ok(await _mediator.Send(new GetGroupedPerDayRoomConsumptionRequest()));
         }
-        else
-        {
-            var perDayRoomsConsumption = await _powerSourceService.GetPerDayRoomConsumption(householdId);
-            return Ok(perDayRoomsConsumption);   
-        }
+
+        return Ok(await _mediator.Send(new GetPerDayRoomConsumptionRequest()));
     }
     
-    [HttpGet("households/{householdId}/rooms/plugs/details")]
-    public async Task<IActionResult> GetPlugsPerRoom(int householdId)
+    [Authorize]
+    [HttpGet("rooms/plugs/details")]
+    public async Task<IActionResult> GetPlugsPerRoomOverview()
     {
-        var perRoomPlugs = await _powerSourceService.GetTotalRoomDetails(householdId);   
-        return Ok(perRoomPlugs);
+        return Ok(await _mediator.Send(new GetPlugsPerRoomOverviewRequest()));
     }
-    
-    
 }

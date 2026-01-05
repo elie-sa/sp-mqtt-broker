@@ -1,9 +1,4 @@
-namespace SPBackend.Views.Mains;
-
-public class PerDayRoomConsumptionViewModel
-{
-    public List<RoomConsumption> Rooms { get; set; }
-}
+namespace SPBackend.DTOs;
 
 public class RoomConsumption
 {
