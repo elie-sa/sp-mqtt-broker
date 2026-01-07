@@ -1,11 +1,15 @@
 using Microsoft.EntityFrameworkCore;
+using SPBackend.Commands.AddSchedule;
 using SPBackend.Commands.AddTimeout;
+using SPBackend.Commands.DeleteSchedule;
 using SPBackend.Commands.DeleteTimeout;
+using SPBackend.Commands.EditSchedule;
 using SPBackend.Commands.RemovePlugFromSchedule;
 using SPBackend.Commands.SetPlug;
 using SPBackend.Commands.SetPlugName;
 using SPBackend.Data;
 using SPBackend.DTOs;
+using SPBackend.Models;
 using SPBackend.Queries.GetPlugDetails;
 using SPBackend.Queries.GetScheduleDetails;
 using SPBackend.Queries.GetSchedules;
@@ -186,14 +190,14 @@ public class PlugsService
             Time = schedule.Time
         };
         
-        response.OnPlugs.AddRange(onPlugs.Select(x => new ScheduleDeviceDto()
+        response.OnPlugs.AddRange(onPlugs.Select(x => new SchedulePlugDto()
         {
             Id = x.PlugId,
             Name = x.Plug.Name,
             IsOn = x.Plug.IsOn
         }));
         
-        response.OffPlugs.AddRange(offPlugs.Select(x => new ScheduleDeviceDto()
+        response.OffPlugs.AddRange(offPlugs.Select(x => new SchedulePlugDto()
         {
             Id = x.PlugId,
             Name = x.Plug.Name,
@@ -202,5 +206,114 @@ public class PlugsService
         
         return response;
     }
+
+    public async Task<AddScheduleResponse> AddSchedule(AddScheduleRequest request, CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken: cancellationToken); 
+        
+        var query =
+            _dbContext.Schedules
+                .AsNoTracking()
+                .Where(s =>
+                    s.PlugControls.Any(pc =>
+                        pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id)
+                    ))
+                .OrderBy(s => s.Time).ToList();
+
+        if (query.Any(x => x.Time.Equals(request.Time)))
+            throw new ArgumentException($"There already exists a schedule at time {request.Time}.");
+        if (query.Any(x => x.Name.Equals(request.Name)))
+            throw new ArgumentException($"There already exists a schedule with name {request.Name}.");
+        
+        var scheduleToAdd = new Schedule()
+        {
+            Name = request.Name,
+            Time = request.Time,
+        };
+
+        if (query.Any(x => x.Time.Equals(request.Time))) ;
+        
+        await _dbContext.Schedules.AddAsync(scheduleToAdd, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     
+        var plugControlsToAdd = new List<PlugControl>();
+        
+        request.OnPlugIds.ForEach(x => plugControlsToAdd.Add(new PlugControl()
+        {
+            PlugId = x,
+            ScheduleId = scheduleToAdd.Id,
+            SetStatus = true
+        }));
+        
+        request.OffPlugIds.ForEach(x => plugControlsToAdd.Add(new PlugControl()
+        {
+            PlugId = x,
+            ScheduleId = scheduleToAdd.Id,
+            SetStatus = false
+        }));
+        
+        await _dbContext.PlugControls.AddRangeAsync(plugControlsToAdd, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return new AddScheduleResponse(){ Message = "Successfully added schedule " + scheduleToAdd.Name };
+    }
+
+    public async Task<DeleteScheduleResponse> DeleteSchedule(long scheduleId,
+        CancellationToken cancellationToken)
+    {
+        var schedule = await _dbContext.Schedules.FirstOrDefaultAsync(x => x.Id == scheduleId, cancellationToken);
+        if (schedule == null) throw new KeyNotFoundException($"No schedule of id {scheduleId} was found");
+        
+        _dbContext.Schedules.Remove(schedule);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return new DeleteScheduleResponse(){ Message = "Successfully deleted schedule " + schedule.Name };
+    }
+
+    public async Task<EditScheduleResponse> EditSchedule(EditScheduleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var schedule = await _dbContext.Schedules.Include(x => x.PlugControls).FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken);
+        if (schedule == null) throw new KeyNotFoundException($"No schedule of id {request.Id} was found");
+        
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken: cancellationToken); 
+        
+        var query =
+            _dbContext.Schedules
+                .AsNoTracking()
+                .Where(s =>
+                    s.PlugControls.Any(pc =>
+                        pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id)
+                    ))
+                .OrderBy(s => s.Time).ToList();
+        
+        if (query.Any(x => x.Time.Equals(request.Time)))
+            throw new ArgumentException($"There already exists a schedule at time {request.Time}.");
+        if (query.Any(x => x.Name.Equals(request.Name)))
+            throw new ArgumentException($"There already exists a schedule with name {request.Name}.");
+        
+        schedule.Name = request.Name;
+        schedule.Time = request.Time;
+        
+        _dbContext.PlugControls.RemoveRange(schedule.PlugControls);
+
+        var plugControlsToAdd =
+            request.OnPlugIds.Select(id => new PlugControl
+                {
+                    PlugId = id,
+                    ScheduleId = schedule.Id,
+                    SetStatus = true
+                })
+                .Concat(request.OffPlugIds.Select(id => new PlugControl
+                {
+                    PlugId = id,
+                    ScheduleId = schedule.Id,
+                    SetStatus = false
+                }))
+                .ToList();
+
+        schedule.PlugControls = plugControlsToAdd;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new EditScheduleResponse { Message = "Successfully edited schedule " + schedule.Name };
+    }
 }

@@ -1,3 +1,5 @@
+using SPBackend.DTOs;
+
 namespace SPBackend.Queries.GetScheduleDetails;
 
 public class GetScheduleDetailsResponse
@@ -5,11 +7,11 @@ public class GetScheduleDetailsResponse
     public long Id { get; set; }
     public string Name { get; set; }
     public DateTime Time { get; set; }
-    public List<ScheduleDeviceDto> OnPlugs { get; set; } = new();
-    public List<ScheduleDeviceDto> OffPlugs { get; set; } = new();
+    public List<SchedulePlugDto> OnPlugs { get; set; } = new();
+    public List<SchedulePlugDto> OffPlugs { get; set; } = new();
 }
 
-public class ScheduleDeviceDto
+public class SchedulePlugDto
 {
     public long Id { get; set; }
     public string Name { get; set; }

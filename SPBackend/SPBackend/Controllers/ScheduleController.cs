@@ -2,6 +2,9 @@ using System.Runtime.InteropServices;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SPBackend.Commands.AddSchedule;
+using SPBackend.Commands.DeleteSchedule;
+using SPBackend.Commands.EditSchedule;
 using SPBackend.Queries.GetScheduleDetails;
 using SPBackend.Queries.GetSchedules;
 
@@ -30,5 +33,26 @@ public class ScheduleController: ControllerBase
     public async Task<IActionResult> GetSchedule(int scheduleId, CancellationToken cancellationToken)
     {
         return Ok(await _mediator.Send(new GetScheduleDetailsRequest(){ ScheduleId = scheduleId}, cancellationToken));
+    }
+
+    [HttpPost("")]
+    [Authorize]
+    public async Task<IActionResult> AddSchedule(AddScheduleRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(request, cancellationToken));
+    }
+
+    [HttpDelete("{scheduleId}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteSchedule(int scheduleId, CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(new DeleteScheduleRequest(){ ScheduleId = scheduleId}, cancellationToken));
+    }
+
+    [HttpPut("")]
+    [Authorize]
+    public async Task<IActionResult> EditSchedule(EditScheduleRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(request, cancellationToken));
     }
 }

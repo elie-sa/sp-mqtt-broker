@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SPBackend")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+67a411fb6a29227c2138b9e006bcbacaf0a477b9")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6521ecbaa72c61b94243de54e1371b2d0eb661e7")]
 [assembly: System.Reflection.AssemblyProductAttribute("SPBackend")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SPBackend")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
