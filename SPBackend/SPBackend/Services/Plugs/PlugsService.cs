@@ -278,11 +278,10 @@ public class PlugsService
         
         var query =
             _dbContext.Schedules
-                .AsNoTracking()
                 .Where(s =>
                     s.PlugControls.Any(pc =>
-                        pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id)
-                    ))
+                        pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id) 
+                    ) && s.Id != schedule.Id)
                 .OrderBy(s => s.Time).ToList();
         
         if (query.Any(x => x.Time.Equals(request.Time)))

@@ -24,4 +24,15 @@ public class AppDbContext: DbContext, IAppDbContext
     public DbSet<Policy> Policies { get; set; }
     public DbSet<PolicyType> PolicyTypes { get; set; }
     public DbSet<PlugPolicy> PlugPolicies { get; set; }
+    
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Schedule>()
+            .HasIndex(u => u.Time)
+            .IsUnique();
+        
+        modelBuilder.Entity<Schedule>()
+            .HasIndex(u => u.Name)
+            .IsUnique();
+    }
 }   
