@@ -27,12 +27,6 @@ public class AppDbContext: DbContext, IAppDbContext
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Schedule>()
-            .HasIndex(u => u.Time)
-            .IsUnique();
         
-        modelBuilder.Entity<Schedule>()
-            .HasIndex(u => u.Name)
-            .IsUnique();
     }
 }   
