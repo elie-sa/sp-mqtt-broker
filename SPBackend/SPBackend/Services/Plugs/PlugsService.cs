@@ -71,6 +71,7 @@ public class PlugsService
     public async Task<SetPlugResponse> SetPlug(SetPlugRequest request, CancellationToken cancellationToken)
     {
         //TODO: Should i add an ack??
+        //TODO: Add the constant plug logic
         var plug = _dbContext.Plugs.FirstOrDefault(x => x.Id.Equals(request.PlugId));
         if (plug == null) throw new KeyNotFoundException("No plug was found");
         if (plug.IsOn.Equals(request.SwitchOn)) return new SetPlugResponse(){ Message = request.SwitchOn ? "Plug was already on." : "Plug was already off." };
@@ -86,10 +87,10 @@ public class PlugsService
         CancellationToken cancellationToken)
     {
         var schedule = await _dbContext.Schedules.FirstOrDefaultAsync(x => x.Id == request.ScheduleId, cancellationToken);
-        if (schedule == null) throw new KeyNotFoundException("No plug was found");
+        if (schedule == null) throw new KeyNotFoundException("No schedule was found");
         
         var plug = await _dbContext.Plugs.Include(x => x.PlugControls).FirstOrDefaultAsync(x => x.Id == request.PlugId, cancellationToken);
-        if (plug == null) throw new KeyNotFoundException("No plug was found");
+        if (plug == null) throw new KeyNotFoundException("No plugs was found");
         
         var plugControl = plug.PlugControls.FirstOrDefault(x => x.ScheduleId == schedule.Id);
         if(plugControl == null) throw new KeyNotFoundException("No plug was found");
@@ -178,7 +179,7 @@ public class PlugsService
         CancellationToken cancellationToken)
     {
         var schedule = await _dbContext.Schedules.Include(x => x.PlugControls).ThenInclude(y => y.Plug).FirstOrDefaultAsync(x => x.Id == request.ScheduleId, cancellationToken);
-        if (schedule == null) throw new KeyNotFoundException("No plug was found");
+        if (schedule == null) throw new KeyNotFoundException("No schedule was found");
 
         var onPlugs = schedule.PlugControls.Where(x => x.SetStatus == true).ToList();
         var offPlugs = schedule.PlugControls.Where(x => x.SetStatus == false).ToList();
