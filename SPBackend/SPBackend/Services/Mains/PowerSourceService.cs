@@ -3,10 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
 using SPBackend.DTOs;
-using SPBackend.Queries.GetGroupedPerDayRoomConsumption;
-using SPBackend.Queries.GetPerDayRoomConsumption;
-using SPBackend.Queries.GetPlugsPerRoomOverview;
-using SPBackend.Queries.GetPowerSource;
+using SPBackend.Requests.Queries.GetGroupedPerDayRoomConsumption;
+using SPBackend.Requests.Queries.GetPerDayRoomConsumption;
+using SPBackend.Requests.Queries.GetPlugsPerRoomOverview;
+using SPBackend.Requests.Queries.GetPowerSource;
 using SPBackend.Services.CurrentUser;
 
 namespace SPBackend.Services.Mains;

@@ -2,11 +2,13 @@ using System.Runtime.InteropServices;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SPBackend.Commands.AddSchedule;
-using SPBackend.Commands.DeleteSchedule;
-using SPBackend.Commands.EditSchedule;
-using SPBackend.Queries.GetScheduleDetails;
-using SPBackend.Queries.GetSchedules;
+using SPBackend.Requests.Commands.AddSchedule;
+using SPBackend.Requests.Commands.DeleteSchedule;
+using SPBackend.Requests.Commands.EditSchedule;
+using SPBackend.Requests.Commands.ToggleSchedule;
+using SPBackend.Requests.Queries.GetScheduleDetails;
+using SPBackend.Requests.Queries.GetSchedules;
+using SPBackend.Requests.Queries.GetSchedulesOfPlug;
 
 namespace SPBackend.Controllers;
 
@@ -54,5 +56,19 @@ public class ScheduleController: ControllerBase
     public async Task<IActionResult> EditSchedule(EditScheduleRequest request, CancellationToken cancellationToken)
     {
         return Ok(await _mediator.Send(request, cancellationToken));
+    }
+
+    [HttpPut("toggle")]
+    [Authorize]
+    public async Task<IActionResult> ToggleSchedule(ToggleScheduleRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(request, cancellationToken));
+    }
+
+    [HttpGet("plug/{plugId}")]
+    [Authorize]
+    public async Task<IActionResult> GetSchedulesOfPlug( long plugId, CancellationToken cancellationToken, [FromQuery] int pageSize, [FromQuery] int page = 1)
+    {
+        return Ok(await _mediator.Send(new GetSchedulesOfPlugRequest(){Page = page, PageSize = pageSize, PlugId = plugId}, cancellationToken));
     }
 }

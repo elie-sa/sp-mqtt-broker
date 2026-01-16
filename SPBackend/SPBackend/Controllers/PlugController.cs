@@ -1,12 +1,13 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SPBackend.Commands.AddTimeout;
-using SPBackend.Commands.DeleteTimeout;
-using SPBackend.Commands.RemovePlugFromSchedule;
-using SPBackend.Commands.SetPlug;
-using SPBackend.Commands.SetPlugName;
-using SPBackend.Queries.GetPlugDetails;
+using SPBackend.Requests.Commands.AddTimeout;
+using SPBackend.Requests.Commands.DeleteTimeout;
+using SPBackend.Requests.Commands.RemovePlugFromSchedule;
+using SPBackend.Requests.Commands.SetPlug;
+using SPBackend.Requests.Commands.SetPlugName;
+using SPBackend.Requests.Queries.GetAllPlugs;
+using SPBackend.Requests.Queries.GetPlugDetails;
 using SPBackend.Services.MQTTService;
 
 namespace SPBackend.Controllers;
@@ -22,6 +23,13 @@ public class PlugController : ControllerBase
     {
         _mqttService = mqttService;
         _mediator = mediator;
+    }
+
+    [Authorize]
+    [HttpGet]
+    public async Task<IActionResult> GetAllPlugs(CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(new GetAllPlugsRequest(), cancellationToken));
     }
 
     [Authorize]

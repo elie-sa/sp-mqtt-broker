@@ -4,8 +4,8 @@ public class Policy
 {
     public long Id { get; set; }
     public string Name { get; set; }
-    public long PolicyTypeId { get; set; }
-    public PolicyType PolicyType { get; set; }
-    public bool? GreaterThan { get; set; }
-    public bool? LessThan { get; set; }
+    public long? PowerSourceId { get; set; }
+    public PowerSource? PowerSource { get; set; }
+    public double? TempGreaterThan { get; set; }
+    public double? TempLessThan { get; set; }
 }

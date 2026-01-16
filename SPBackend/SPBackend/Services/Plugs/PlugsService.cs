@@ -1,18 +1,21 @@
 using Microsoft.EntityFrameworkCore;
-using SPBackend.Commands.AddSchedule;
-using SPBackend.Commands.AddTimeout;
-using SPBackend.Commands.DeleteSchedule;
-using SPBackend.Commands.DeleteTimeout;
-using SPBackend.Commands.EditSchedule;
-using SPBackend.Commands.RemovePlugFromSchedule;
-using SPBackend.Commands.SetPlug;
-using SPBackend.Commands.SetPlugName;
 using SPBackend.Data;
 using SPBackend.DTOs;
 using SPBackend.Models;
-using SPBackend.Queries.GetPlugDetails;
-using SPBackend.Queries.GetScheduleDetails;
-using SPBackend.Queries.GetSchedules;
+using SPBackend.Requests.Commands.AddSchedule;
+using SPBackend.Requests.Commands.AddTimeout;
+using SPBackend.Requests.Commands.DeleteSchedule;
+using SPBackend.Requests.Commands.DeleteTimeout;
+using SPBackend.Requests.Commands.EditSchedule;
+using SPBackend.Requests.Commands.RemovePlugFromSchedule;
+using SPBackend.Requests.Commands.SetPlug;
+using SPBackend.Requests.Commands.SetPlugName;
+using SPBackend.Requests.Commands.ToggleSchedule;
+using SPBackend.Requests.Queries.GetAllPlugs;
+using SPBackend.Requests.Queries.GetPlugDetails;
+using SPBackend.Requests.Queries.GetScheduleDetails;
+using SPBackend.Requests.Queries.GetSchedules;
+using SPBackend.Requests.Queries.GetSchedulesOfPlug;
 using SPBackend.Services.CurrentUser;
 using SPBackend.Services.MQTTService;
 
@@ -137,41 +140,65 @@ public class PlugsService
     public async Task<GetSchedulesResponse> GetSchedules(CancellationToken cancellationToken, int page = 1, int pageSize = 20)
     {
         page = page < 1 ? 1 : page;
-        pageSize = pageSize < 1 ? 20 : pageSize;
-        if (pageSize > 100) pageSize = 100;
-        
-        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken: cancellationToken); 
+        pageSize = pageSize < 1 ? 7 : pageSize;
+        if (pageSize > 31) pageSize = 31;
 
-        var query =
-            _dbContext.Schedules
-                .AsNoTracking()
-                .Where(s =>
-                    s.PlugControls.Any(pc =>
-                        pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id)
-                    ))
-                .OrderBy(s => s.Time);
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
 
-        var totalCount = await query.CountAsync(cancellationToken);
+        if (user == null) throw new Exception("User not found");
 
-        var schedules = await query
+        // Base query: schedules belonging to this user
+        var baseQuery = _dbContext.Schedules
+            .AsNoTracking()
+            .Where(s => s.PlugControls.Any(pc =>
+                pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id)));
+
+        // 1) Get distinct days (sorted)
+        var dayQuery = baseQuery
+            .Select(s => s.Time.Date)
+            .Distinct()
+            .OrderBy(d => d);
+
+        var totalDays = await dayQuery.CountAsync(cancellationToken);
+
+        var days = await dayQuery
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(s => new ScheduleDto()
+            .ToListAsync(cancellationToken);
+
+        // 2) Get schedules for those days (single query)
+        var schedulesForDays = await baseQuery
+            .Where(s => days.Contains(s.Time.Date))
+            .OrderBy(s => s.Time)
+            .Select(s => new ScheduleDto
             {
                 Id = s.Id,
                 Name = s.Name,
                 Time = s.Time,
-                DeviceCount = s.PlugControls.Count()
+                DeviceCount = s.PlugControls.Count(),
+                IsActive = s.IsActive
             })
             .ToListAsync(cancellationToken);
 
-        return new GetSchedulesResponse()
+        // 3) Group in memory
+        var grouped = schedulesForDays
+            .GroupBy(s => DateOnly.FromDateTime(s.Time.Date))
+            .OrderBy(g => g.Key)
+            .Select(g => new ScheduleDayDto
+            {
+                Date = g.Key,
+                Schedules = g.ToList()
+            })
+            .ToList();
+
+        return new GetSchedulesResponse
         {
             Page = page,
             PageSize = pageSize,
-            TotalCount = totalCount,
-            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
-            Schedules = schedules
+            TotalDays = totalDays,
+            TotalPages = (int)Math.Ceiling(totalDays / (double)pageSize),
+            Days = grouped
         };
     }
 
@@ -188,7 +215,8 @@ public class PlugsService
         {
             Id = schedule.Id,
             Name = schedule.Name,
-            Time = schedule.Time
+            Time = schedule.Time,
+            IsActive = schedule.IsActive,
         };
         
         response.OnPlugs.AddRange(onPlugs.Select(x => new SchedulePlugDto()
@@ -230,6 +258,7 @@ public class PlugsService
         {
             Name = request.Name,
             Time = request.Time,
+            IsActive = request.IsActive
         };
 
         if (query.Any(x => x.Time.Equals(request.Time))) ;
@@ -315,5 +344,91 @@ public class PlugsService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new EditScheduleResponse { Message = "Successfully edited schedule " + schedule.Name };
+    }
+
+    public async Task<ToggleScheduleResponse> ToggleSchedule(ToggleScheduleRequest request, CancellationToken cancellationToken)
+    {
+        var schedule = _dbContext.Schedules.FirstOrDefault(x => x.Id == request.ScheduleId);
+        if(schedule == null) throw new KeyNotFoundException($"No schedule of id {request.ScheduleId} was found");
+        
+        if(schedule.IsActive == request.Enable) return new ToggleScheduleResponse(){ Message = "Schedule is already " + (schedule.IsActive ? "active." : "inactive.") };
+        schedule.IsActive = request.Enable;
+        
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return new ToggleScheduleResponse(){ Message = "Schedule successfully toggled " + (request.Enable ? "active." : "inactive.") };
+    }
+
+    public async Task<GetSchedulesOfPlugResponse> GetSchedulesOfPlug(long plugId, CancellationToken cancellationToken, int page = 1, int pageSize = 7)
+    {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize < 1 ? 7 : pageSize;
+        if (pageSize > 31) pageSize = 31;
+        
+        var plug = await _dbContext.Plugs.FirstOrDefaultAsync(x => x.Id == plugId, cancellationToken);
+        if(plug == null) throw new KeyNotFoundException($"No schedule of plug with id {plugId} was found");
+
+        var baseQuery = _dbContext.PlugControls
+            .AsNoTracking()
+            .Where(pc => pc.PlugId == plugId);
+
+        var dayQuery = await baseQuery
+            .Select(pc => pc.Schedule.Time.Date)
+            .Distinct()
+            .OrderBy(d => d).ToListAsync(cancellationToken);
+
+        var totalDays = dayQuery.Count;
+
+        var days = dayQuery
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize);
+
+        var schedulesForDays = await baseQuery
+            .Where(pc => days.Contains(pc.Schedule.Time.Date))
+            .OrderBy(pc => pc.Schedule.Time)
+            .Select(pc => new ScheduleOfPlugDto
+            {
+                Id = pc.Schedule.Id,
+                Name = pc.Schedule.Name,
+                Time = pc.Schedule.Time,
+                IsOn = pc.SetStatus,
+                IsActive = pc.Schedule.IsActive
+            })
+            .ToListAsync(cancellationToken);
+
+        var groupedDays = schedulesForDays
+            .GroupBy(s => DateOnly.FromDateTime(s.Time.Date))
+            .OrderBy(g => g.Key)
+            .Select(g => new PlugScheduleDayDto
+            {
+                Date = g.Key,
+                Schedules = g.ToList()
+            })
+            .ToList();
+
+        return new GetSchedulesOfPlugResponse
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalDays = totalDays,
+            TotalPages = (int)Math.Ceiling(totalDays / (double)pageSize),
+            Days = groupedDays
+        };
+        
+    }
+
+    public async Task<GetAllPlugsResponse> GetAllPlugs(GetAllPlugsRequest request, CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken: cancellationToken); 
+        var plugs = await _dbContext.Plugs.Include(x => x.Room).Where(x => x.Room.Household.Users.Any(u => u.Id == user!.Id)).OrderBy(x => x.Id).ToListAsync(cancellationToken);
+
+        return new GetAllPlugsResponse()
+        {
+            Plugs = plugs.Select(x => new PlugDto
+            {
+                Id = x.Id,
+                Name = x.Name,
+                Room = x.Room.Name
+            }).ToList()
+        };
     }
 }

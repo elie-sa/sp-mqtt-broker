@@ -2,8 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
 using SPBackend.DTOs;
 using SPBackend.Models;
-using SPBackend.Queries.GetPlugsPerRoom;
-using SPBackend.Queries.GetRooms;
+using SPBackend.Requests.Queries.GetPlugsPerRoom;
+using SPBackend.Requests.Queries.GetRooms;
 using SPBackend.Services.CurrentUser;
 
 namespace SPBackend.Services.Rooms;

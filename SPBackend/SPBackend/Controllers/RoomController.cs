@@ -1,8 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SPBackend.Queries.GetPlugsPerRoom;
-using SPBackend.Queries.GetRooms;
+using SPBackend.Requests.Queries.GetPlugsPerRoom;
+using SPBackend.Requests.Queries.GetRooms;
 
 namespace SPBackend.Controllers;
 

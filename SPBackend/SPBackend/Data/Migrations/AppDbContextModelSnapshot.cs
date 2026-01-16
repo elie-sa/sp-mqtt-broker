@@ -208,41 +208,24 @@ namespace SPBackend.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<bool?>("GreaterThan")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool?>("LessThan")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<long>("PolicyTypeId")
+                    b.Property<long?>("PowerSourceId")
                         .HasColumnType("bigint");
+
+                    b.Property<double?>("TempGreaterThan")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("TempLessThan")
+                        .HasColumnType("double precision");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PolicyTypeId");
+                    b.HasIndex("PowerSourceId");
 
                     b.ToTable("Policies");
-                });
-
-            modelBuilder.Entity("SPBackend.Models.PolicyType", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("PolicyTypes");
                 });
 
             modelBuilder.Entity("SPBackend.Models.PowerSource", b =>
@@ -321,6 +304,9 @@ namespace SPBackend.Migrations
                         .HasColumnType("bigint");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -445,13 +431,11 @@ namespace SPBackend.Migrations
 
             modelBuilder.Entity("SPBackend.Models.Policy", b =>
                 {
-                    b.HasOne("SPBackend.Models.PolicyType", "PolicyType")
+                    b.HasOne("SPBackend.Models.PowerSource", "PowerSource")
                         .WithMany()
-                        .HasForeignKey("PolicyTypeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("PowerSourceId");
 
-                    b.Navigation("PolicyType");
+                    b.Navigation("PowerSource");
                 });
 
             modelBuilder.Entity("SPBackend.Models.PowerSource", b =>

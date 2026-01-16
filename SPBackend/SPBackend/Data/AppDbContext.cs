@@ -22,7 +22,6 @@ public class AppDbContext: DbContext, IAppDbContext
     public DbSet<Schedule> Schedules { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<Policy> Policies { get; set; }
-    public DbSet<PolicyType> PolicyTypes { get; set; }
     public DbSet<PlugPolicy> PlugPolicies { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)

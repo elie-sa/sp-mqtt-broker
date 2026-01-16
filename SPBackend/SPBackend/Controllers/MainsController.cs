@@ -1,10 +1,10 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SPBackend.Queries.GetGroupedPerDayRoomConsumption;
-using SPBackend.Queries.GetPerDayRoomConsumption;
-using SPBackend.Queries.GetPlugsPerRoomOverview;
-using SPBackend.Queries.GetPowerSource;
+using SPBackend.Requests.Queries.GetGroupedPerDayRoomConsumption;
+using SPBackend.Requests.Queries.GetPerDayRoomConsumption;
+using SPBackend.Requests.Queries.GetPlugsPerRoomOverview;
+using SPBackend.Requests.Queries.GetPowerSource;
 using SPBackend.Services.Mains;
 
 namespace SPBackend.Controllers;
