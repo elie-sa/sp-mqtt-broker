@@ -14,6 +14,6 @@ public class GetSchedulesRequestHandler: IRequestHandler<GetSchedulesRequest, Ge
 
     public async Task<GetSchedulesResponse> Handle(GetSchedulesRequest request, CancellationToken cancellationToken)
     {
-        return await _plugsService.GetSchedules(cancellationToken, request.Page, request.PageSize);
+        return await _plugsService.GetSchedules(cancellationToken);
     }
 }

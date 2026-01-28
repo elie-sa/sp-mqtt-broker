@@ -8,6 +8,7 @@ using SPBackend.Requests.Commands.EditSchedule;
 using SPBackend.Requests.Commands.ToggleSchedule;
 using SPBackend.Requests.Queries.GetScheduleDetails;
 using SPBackend.Requests.Queries.GetSchedules;
+using SPBackend.Requests.Queries.GetSchedulesByDay;
 using SPBackend.Requests.Queries.GetSchedulesOfPlug;
 
 namespace SPBackend.Controllers;
@@ -25,9 +26,16 @@ public class ScheduleController: ControllerBase
 
     [HttpGet("")]
     [Authorize]
-    public async Task<IActionResult> GetSchedules(CancellationToken cancellationToken, [FromQuery] int pageSize, [FromQuery] int page = 1)
+    public async Task<IActionResult> GetSchedules(CancellationToken cancellationToken)
     {
-        return Ok(await _mediator.Send(new GetSchedulesRequest(){Page = page, PageSize = pageSize}, cancellationToken));
+        return Ok(await _mediator.Send(new GetSchedulesRequest(), cancellationToken));
+    }
+    
+    [HttpGet("day")]
+    [Authorize]
+    public async Task<IActionResult> GetSchedulesByDay([FromQuery] GetSchedulesByDayRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(request, cancellationToken));
     }
 
     [HttpGet("{scheduleId}")]

@@ -1,11 +1,11 @@
-namespace SPBackend.Models;
+using MediatR;
 
-public class Policy
+namespace SPBackend.Requests.Commands.AddPolicy;
+
+public class AddPolicyRequest: IRequest<AddPolicyResponse>
 {
-    public long Id { get; set; }
     public string Name { get; set; }
     public long? PowerSourceId { get; set; }
-    public PowerSource? PowerSource { get; set; }
     public double? TempGreaterThan { get; set; }
     public double? TempLessThan { get; set; }
     public bool IsActive { get; set; }

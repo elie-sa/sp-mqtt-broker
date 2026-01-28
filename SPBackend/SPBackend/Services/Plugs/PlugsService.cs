@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
 using SPBackend.DTOs;
 using SPBackend.Models;
+using SPBackend.Requests.Commands.AddPolicy;
 using SPBackend.Requests.Commands.AddSchedule;
 using SPBackend.Requests.Commands.AddTimeout;
 using SPBackend.Requests.Commands.DeleteSchedule;
@@ -15,6 +16,7 @@ using SPBackend.Requests.Queries.GetAllPlugs;
 using SPBackend.Requests.Queries.GetPlugDetails;
 using SPBackend.Requests.Queries.GetScheduleDetails;
 using SPBackend.Requests.Queries.GetSchedules;
+using SPBackend.Requests.Queries.GetSchedulesByDay;
 using SPBackend.Requests.Queries.GetSchedulesOfPlug;
 using SPBackend.Services.CurrentUser;
 using SPBackend.Services.MQTTService;
@@ -137,68 +139,39 @@ public class PlugsService
         return new DeleteTimeoutResponse() { Message = $"Successfully added timeout of {plug.Timeout} to plug {plug.Id}" };
     }
 
-    public async Task<GetSchedulesResponse> GetSchedules(CancellationToken cancellationToken, int page = 1, int pageSize = 20)
+    public async Task<GetSchedulesResponse> GetSchedules(CancellationToken cancellationToken)
     {
-        page = page < 1 ? 1 : page;
-        pageSize = pageSize < 1 ? 7 : pageSize;
-        if (pageSize > 31) pageSize = 31;
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
+        if (user == null) throw new ArgumentException("User not found");
+        
+        //TODO: Should i limit the schedules query to the next 2 months?
+        var schedules = await _dbContext.Schedules.Where(x => 
+            x.PlugControls.Any(pc => pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id))).ToListAsync(cancellationToken: cancellationToken);
 
-        var user = await _dbContext.Users
-            .FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
-
-        if (user == null) throw new Exception("User not found");
-
-        // Base query: schedules belonging to this user
-        var baseQuery = _dbContext.Schedules
-            .AsNoTracking()
-            .Where(s => s.PlugControls.Any(pc =>
-                pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id)));
-
-        // 1) Get distinct days (sorted)
-        var dayQuery = baseQuery
-            .Select(s => s.Time.Date)
-            .Distinct()
-            .OrderBy(d => d);
-
-        var totalDays = await dayQuery.CountAsync(cancellationToken);
-
-        var days = await dayQuery
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken);
-
-        // 2) Get schedules for those days (single query)
-        var schedulesForDays = await baseQuery
-            .Where(s => days.Contains(s.Time.Date))
-            .OrderBy(s => s.Time)
-            .Select(s => new ScheduleDto
-            {
-                Id = s.Id,
-                Name = s.Name,
-                Time = s.Time,
-                DeviceCount = s.PlugControls.Count(),
-                IsActive = s.IsActive
-            })
-            .ToListAsync(cancellationToken);
-
-        // 3) Group in memory
-        var grouped = schedulesForDays
-            .GroupBy(s => DateOnly.FromDateTime(s.Time.Date))
-            .OrderBy(g => g.Key)
-            .Select(g => new ScheduleDayDto
-            {
-                Date = g.Key,
-                Schedules = g.ToList()
-            })
-            .ToList();
-
-        return new GetSchedulesResponse
+        return new GetSchedulesResponse()
         {
-            Page = page,
-            PageSize = pageSize,
-            TotalDays = totalDays,
-            TotalPages = (int)Math.Ceiling(totalDays / (double)pageSize),
-            Days = grouped
+            ScheduledDates = schedules.Select(x => DateOnly.FromDateTime(x.Time)).Distinct().Order().ToList()
+        };
+    }
+
+    public async Task<GetSchedulesByDayResponse> GetSchedulesByDay(GetSchedulesByDayRequest request,
+        CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
+        if (user == null) throw new ArgumentException("User not found");
+        
+        var schedules = await _dbContext.Schedules.Include(x => x.PlugControls)
+            .Where(x => DateOnly.FromDateTime(x.Time).Equals(request.Date)).ToListAsync(cancellationToken: cancellationToken);
+        return new GetSchedulesByDayResponse()
+        {
+            Schedules = schedules.Select(x => new ScheduleDto()
+            {
+                Id = x.Id,
+                Name = x.Name,
+                DeviceCount = x.PlugControls.Count,
+                Time = x.Time,
+                IsActive = x.IsActive
+            }).ToList()
         };
     }
 
@@ -429,6 +402,30 @@ public class PlugsService
                 Name = x.Name,
                 Room = x.Room.Name
             }).ToList()
+        };
+    }
+
+    public async Task<AddPolicyResponse> AddPolicy(AddPolicyRequest request, CancellationToken cancellationToken)
+    {
+        var policyToAdd = new Policy
+        {
+            Name = request.Name,
+            IsActive = request.IsActive
+        };
+
+        if (request.PowerSourceId is null && request.TempGreaterThan is null && request.TempLessThan is null)
+            throw new ArgumentException("Either a power source or a temperature condition must be provided.");
+            
+        if(request.PowerSourceId != null) policyToAdd.PowerSourceId = request.PowerSourceId;
+        if(request.TempGreaterThan != null) policyToAdd.TempGreaterThan = request.TempGreaterThan;
+        if(request.TempLessThan != null) policyToAdd.TempLessThan = request.TempLessThan;
+        
+        _dbContext.Policies.Add(policyToAdd);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new AddPolicyResponse()
+        {
+            Message = "Successfully added policy " + policyToAdd.Name
         };
     }
 }
