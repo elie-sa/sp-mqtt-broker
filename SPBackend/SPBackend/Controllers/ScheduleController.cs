@@ -9,7 +9,7 @@ using SPBackend.Requests.Commands.ToggleSchedule;
 using SPBackend.Requests.Queries.GetScheduleDetails;
 using SPBackend.Requests.Queries.GetSchedules;
 using SPBackend.Requests.Queries.GetSchedulesByDay;
-using SPBackend.Requests.Queries.GetSchedulesOfPlug;
+using SPBackend.Requests.Queries.GetSchedulesNextDays;
 
 namespace SPBackend.Controllers;
 
@@ -26,9 +26,9 @@ public class ScheduleController: ControllerBase
 
     [HttpGet("")]
     [Authorize]
-    public async Task<IActionResult> GetSchedules(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetSchedules([FromQuery] GetSchedulesRequest request, CancellationToken cancellationToken)
     {
-        return Ok(await _mediator.Send(new GetSchedulesRequest(), cancellationToken));
+        return Ok(await _mediator.Send(request, cancellationToken));
     }
     
     [HttpGet("day")]
@@ -36,6 +36,13 @@ public class ScheduleController: ControllerBase
     public async Task<IActionResult> GetSchedulesByDay([FromQuery] GetSchedulesByDayRequest request, CancellationToken cancellationToken)
     {
         return Ok(await _mediator.Send(request, cancellationToken));
+    }
+    
+    [HttpGet("days/upcoming")]
+    [Authorize]
+    public async Task<IActionResult> GetSchedulesNextDays(CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(new GetSchedulesNextDaysRequest(), cancellationToken));
     }
 
     [HttpGet("{scheduleId}")]
@@ -71,12 +78,5 @@ public class ScheduleController: ControllerBase
     public async Task<IActionResult> ToggleSchedule(ToggleScheduleRequest request, CancellationToken cancellationToken)
     {
         return Ok(await _mediator.Send(request, cancellationToken));
-    }
-
-    [HttpGet("plug/{plugId}")]
-    [Authorize]
-    public async Task<IActionResult> GetSchedulesOfPlug( long plugId, CancellationToken cancellationToken, [FromQuery] int pageSize, [FromQuery] int page = 1)
-    {
-        return Ok(await _mediator.Send(new GetSchedulesOfPlugRequest(){Page = page, PageSize = pageSize, PlugId = plugId}, cancellationToken));
     }
 }

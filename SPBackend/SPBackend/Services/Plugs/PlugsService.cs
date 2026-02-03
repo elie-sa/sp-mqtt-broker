@@ -5,19 +5,24 @@ using SPBackend.Models;
 using SPBackend.Requests.Commands.AddPolicy;
 using SPBackend.Requests.Commands.AddSchedule;
 using SPBackend.Requests.Commands.AddTimeout;
+using SPBackend.Requests.Commands.DeletePolicy;
 using SPBackend.Requests.Commands.DeleteSchedule;
 using SPBackend.Requests.Commands.DeleteTimeout;
+using SPBackend.Requests.Commands.EditPolicy;
 using SPBackend.Requests.Commands.EditSchedule;
 using SPBackend.Requests.Commands.RemovePlugFromSchedule;
 using SPBackend.Requests.Commands.SetPlug;
 using SPBackend.Requests.Commands.SetPlugName;
+using SPBackend.Requests.Commands.TogglePolicy;
 using SPBackend.Requests.Commands.ToggleSchedule;
 using SPBackend.Requests.Queries.GetAllPlugs;
+using SPBackend.Requests.Queries.GetAllPolicies;
 using SPBackend.Requests.Queries.GetPlugDetails;
+using SPBackend.Requests.Queries.GetPolicy;
 using SPBackend.Requests.Queries.GetScheduleDetails;
 using SPBackend.Requests.Queries.GetSchedules;
 using SPBackend.Requests.Queries.GetSchedulesByDay;
-using SPBackend.Requests.Queries.GetSchedulesOfPlug;
+using SPBackend.Requests.Queries.GetSchedulesNextDays;
 using SPBackend.Services.CurrentUser;
 using SPBackend.Services.MQTTService;
 
@@ -139,15 +144,24 @@ public class PlugsService
         return new DeleteTimeoutResponse() { Message = $"Successfully added timeout of {plug.Timeout} to plug {plug.Id}" };
     }
 
-    public async Task<GetSchedulesResponse> GetSchedules(CancellationToken cancellationToken)
+    public async Task<GetSchedulesResponse> GetSchedules(GetSchedulesRequest request, CancellationToken cancellationToken)
     {
         var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
         if (user == null) throw new ArgumentException("User not found");
-        
-        //TODO: Should i limit the schedules query to the next 2 months?
-        var schedules = await _dbContext.Schedules.Where(x => 
-            x.PlugControls.Any(pc => pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id))).ToListAsync(cancellationToken: cancellationToken);
 
+        var schedules = new List<Schedule>();
+
+        if (request.PlugIds.Count == 0)
+        {
+            schedules = await _dbContext.Schedules.Where(x => x.Time >= DateTime.UtcNow
+                && x.PlugControls.Any(pc => pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id))).ToListAsync(cancellationToken: cancellationToken);
+        }
+        else
+        {
+            schedules = await _dbContext.Schedules.Where(x => x.Time >= DateTime.UtcNow && x.PlugControls.Any(x => request.PlugIds.Contains(x.PlugId))
+                && x.PlugControls.Any(pc => pc.Plug.Room.Household.Users.Any(u => u.Id == user.Id))).ToListAsync(cancellationToken: cancellationToken);
+        }
+        
         return new GetSchedulesResponse()
         {
             ScheduledDates = schedules.Select(x => DateOnly.FromDateTime(x.Time)).Distinct().Order().ToList()
@@ -159,9 +173,19 @@ public class PlugsService
     {
         var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
         if (user == null) throw new ArgumentException("User not found");
+
+        var schedules = new List<Schedule>();
+        if (request.PlugIds.Count == 0)
+        {
+            schedules = await _dbContext.Schedules.Include(x => x.PlugControls)
+                .Where(x => DateOnly.FromDateTime(x.Time).Equals(request.Date)).ToListAsync(cancellationToken: cancellationToken);
+        }
+        else
+        {
+            schedules = await _dbContext.Schedules.Include(x => x.PlugControls)
+                .Where(x => DateOnly.FromDateTime(x.Time).Equals(request.Date) && x.PlugControls.Any(pc => request.PlugIds.Contains(pc.PlugId))).ToListAsync(cancellationToken: cancellationToken);
+        }
         
-        var schedules = await _dbContext.Schedules.Include(x => x.PlugControls)
-            .Where(x => DateOnly.FromDateTime(x.Time).Equals(request.Date)).ToListAsync(cancellationToken: cancellationToken);
         return new GetSchedulesByDayResponse()
         {
             Schedules = schedules.Select(x => new ScheduleDto()
@@ -331,64 +355,6 @@ public class PlugsService
         return new ToggleScheduleResponse(){ Message = "Schedule successfully toggled " + (request.Enable ? "active." : "inactive.") };
     }
 
-    public async Task<GetSchedulesOfPlugResponse> GetSchedulesOfPlug(long plugId, CancellationToken cancellationToken, int page = 1, int pageSize = 7)
-    {
-        page = page < 1 ? 1 : page;
-        pageSize = pageSize < 1 ? 7 : pageSize;
-        if (pageSize > 31) pageSize = 31;
-        
-        var plug = await _dbContext.Plugs.FirstOrDefaultAsync(x => x.Id == plugId, cancellationToken);
-        if(plug == null) throw new KeyNotFoundException($"No schedule of plug with id {plugId} was found");
-
-        var baseQuery = _dbContext.PlugControls
-            .AsNoTracking()
-            .Where(pc => pc.PlugId == plugId);
-
-        var dayQuery = await baseQuery
-            .Select(pc => pc.Schedule.Time.Date)
-            .Distinct()
-            .OrderBy(d => d).ToListAsync(cancellationToken);
-
-        var totalDays = dayQuery.Count;
-
-        var days = dayQuery
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize);
-
-        var schedulesForDays = await baseQuery
-            .Where(pc => days.Contains(pc.Schedule.Time.Date))
-            .OrderBy(pc => pc.Schedule.Time)
-            .Select(pc => new ScheduleOfPlugDto
-            {
-                Id = pc.Schedule.Id,
-                Name = pc.Schedule.Name,
-                Time = pc.Schedule.Time,
-                IsOn = pc.SetStatus,
-                IsActive = pc.Schedule.IsActive
-            })
-            .ToListAsync(cancellationToken);
-
-        var groupedDays = schedulesForDays
-            .GroupBy(s => DateOnly.FromDateTime(s.Time.Date))
-            .OrderBy(g => g.Key)
-            .Select(g => new PlugScheduleDayDto
-            {
-                Date = g.Key,
-                Schedules = g.ToList()
-            })
-            .ToList();
-
-        return new GetSchedulesOfPlugResponse
-        {
-            Page = page,
-            PageSize = pageSize,
-            TotalDays = totalDays,
-            TotalPages = (int)Math.Ceiling(totalDays / (double)pageSize),
-            Days = groupedDays
-        };
-        
-    }
-
     public async Task<GetAllPlugsResponse> GetAllPlugs(GetAllPlugsRequest request, CancellationToken cancellationToken)
     {
         var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken: cancellationToken); 
@@ -422,10 +388,246 @@ public class PlugsService
         
         _dbContext.Policies.Add(policyToAdd);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        
+        request.OnPlugIds.ForEach(x => _dbContext.PlugPolicies.Add(new PlugPolicy()
+        {
+            PlugId = x,
+            PolicyId = policyToAdd.Id,
+            SetStatus = true
+        }));
+        
+        request.OffPlugIds.ForEach(x => _dbContext.PlugPolicies.Add(new PlugPolicy()
+        {
+            PlugId = x,
+            PolicyId = policyToAdd.Id,
+            SetStatus = false
+        }));
+        
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new AddPolicyResponse()
         {
             Message = "Successfully added policy " + policyToAdd.Name
+        };
+    }
+
+    public async Task<GetAllPoliciesResponse> GetAllPolicies(GetAllPoliciesRequest request, CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken);
+
+        var plugPolicies = new List<PlugPolicy>();
+        if (!request.TempOnly && !request.PowerSourceOnly)
+        {
+            plugPolicies = await _dbContext.PlugPolicies.Include(p => p.Policy)
+                .ThenInclude(y => y.PowerSource).Where(x => x.Plug.Room.Household.Users.Any(u => u.Id == user!.Id)).ToListAsync(cancellationToken);
+        } else if (request.TempOnly)
+        {
+            plugPolicies = await _dbContext.PlugPolicies.Include(p => p.Policy)
+                .ThenInclude(y => y.PowerSource).Where(x => (x.Policy.TempLessThan != null || x.Policy.TempGreaterThan != null) && x.Plug.Room.Household.Users.Any(u => u.Id == user!.Id)).ToListAsync(cancellationToken);
+        }
+        else
+        {
+            plugPolicies = await _dbContext.PlugPolicies.Include(p => p.Policy)
+                .ThenInclude(y => y.PowerSource).Where(x => x.Policy.PowerSource != null && x.Plug.Room.Household.Users.Any(u => u.Id == user!.Id)).ToListAsync(cancellationToken);
+        }
+        
+        if (plugPolicies == null) throw new Exception("No policies found.");
+
+        return new GetAllPoliciesResponse()
+        {
+            Policies = plugPolicies
+                .GroupBy(pp => pp.Policy.Id)
+                .Select(g =>
+                {
+                    var policy = g.First().Policy;
+
+                    return new PolicyDto
+                    {
+                        Id = policy.Id,
+                        Name = policy.Name,
+                        PowerSourceId = policy.PowerSourceId,
+                        PowerSourceName = policy.PowerSource!.Name,
+                        IsActive = policy.IsActive,
+                        TempGreaterThan = policy.TempGreaterThan,
+                        TempLessThan = policy.TempLessThan,
+                        NumOfPlugs = g.Count()
+                    };
+                }).ToList()
+        };
+    }
+
+    public async Task<GetPolicyResponse> GetPolicy(long requestPolicyId, CancellationToken cancellationToken)
+    {
+        var policy = await _dbContext.Policies.Include(x => x.PowerSource).Where(x => x.Id == requestPolicyId).FirstOrDefaultAsync(cancellationToken);
+        if(policy is null) throw new ArgumentException("No policy found.");
+        var plugPolicies = await _dbContext.PlugPolicies.Where(x => x.PolicyId == requestPolicyId)
+            .Include(x => x.Plug).ToListAsync(cancellationToken);   
+        if(plugPolicies == null) throw new Exception("No plug policies found.");
+
+
+        var output = new GetPolicyResponse()
+        {
+            Id = policy.Id,
+            Name = policy.Name,
+            IsActive = policy.IsActive,
+            TempGreaterThan = policy.TempGreaterThan,
+            TempLessThan = policy.TempLessThan,
+            PowerSourceId = policy.PowerSourceId,
+            PowerSourceName = policy.PowerSource.Name,
+            NumOfPlugs = plugPolicies.Count(),
+            Plugs = (
+                plugPolicies.Select(x => new SmallPlugDto()
+            {
+                Id = x.PlugId,
+                Name = x.Plug.Name,
+            }).ToList())
+        };
+
+        return output;
+    }
+
+    public async Task<GetSchedulesNextDaysResponse> GetSchedulesNextDays(GetSchedulesNextDaysRequest request, CancellationToken cancellationToken)
+    {
+         var user = await _dbContext.Users
+                .FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
+        
+            if (user == null) throw new ArgumentException("User not found");
+        
+            var today = DateOnly.FromDateTime(DateTime.Now);
+        
+            var query = _dbContext.Schedules
+                .AsNoTracking()
+                .Include(s => s.PlugControls)
+                .Where(s => DateOnly.FromDateTime(s.Time) >= today);
+        
+            var nextDates = await query
+                .Select(s => DateOnly.FromDateTime(s.Time))
+                .Distinct()
+                .OrderBy(d => d)
+                .Take(2)
+                .ToListAsync(cancellationToken);
+        
+            if (nextDates.Count == 0)
+            {
+                return new GetSchedulesNextDaysResponse { Days = new List<DaySchedulesDto>() };
+            }
+        
+            var schedules = await query
+                .Where(s => nextDates.Contains(DateOnly.FromDateTime(s.Time)))
+                .ToListAsync(cancellationToken);
+        
+            var days = schedules
+                .GroupBy(s => DateOnly.FromDateTime(s.Time))
+                .OrderBy(g => g.Key)
+                .Select(g => new DaySchedulesDto
+                {
+                    Date = g.Key,
+                    Schedules = g.Select(s => new ScheduleDto
+                    {
+                        Id = s.Id,
+                        Name = s.Name,
+                        DeviceCount = s.PlugControls.Count,
+                        Time = s.Time,
+                        IsActive = s.IsActive
+                    }).ToList()
+                })
+                .ToList();
+        
+            return new GetSchedulesNextDaysResponse { Days = days };
+    }
+
+    public async Task<DeletePolicyResponse> DeletePolicy(long requestPolicyId, CancellationToken cancellationToken)
+    {
+        var policy = await _dbContext.Policies.FirstOrDefaultAsync(x => x.Id == requestPolicyId, cancellationToken);
+        if (policy == null) throw new KeyNotFoundException($"No policy of id {requestPolicyId} was found");
+        
+        _dbContext.Policies.Remove(policy);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return new DeletePolicyResponse(){ Message = "Successfully deleted policy " + policy.Name };
+    }
+
+    public async Task<EditPolicyResponse> EditPolicy(EditPolicyRequest request, CancellationToken cancellationToken)
+    {
+        var policy = await _dbContext.Policies
+            .Include(p => p.PlugPolicies)
+            .FirstOrDefaultAsync(p => p.Id == request.Id, cancellationToken);
+
+        if (policy == null)
+            throw new KeyNotFoundException($"No policy of id {request.Id} was found");
+
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
+
+        if (user == null)
+            throw new ArgumentException("User not found");
+
+        var otherPolicies = await _dbContext.Policies
+            .Where(p =>
+                p.PlugPolicies.Any(pp =>
+                    pp.Plug.Room.Household.Users.Any(u => u.Id == user.Id)
+                ) && p.Id != policy.Id)
+            .ToListAsync(cancellationToken);
+
+        if (otherPolicies.Any(p => p.Name == request.Name))
+            throw new ArgumentException($"There already exists a policy with name {request.Name}.");
+
+        policy.Name = request.Name;
+        var powerSource = _dbContext.PowerSources.FirstOrDefault(x => x.Id == policy.PowerSourceId);
+        if (powerSource == null) throw new ArgumentException("Invalid power source id provided");
+        policy.PowerSourceId = request.PowerSourceId;
+        policy.TempGreaterThan = request.TempGreaterThan;
+        policy.TempLessThan = request.TempLessThan;
+
+        _dbContext.PlugPolicies.RemoveRange(policy.PlugPolicies);
+
+        var plugPoliciesToAdd =
+            request.OnPlugIds.Select(id => new PlugPolicy
+                {
+                    PlugId = id,
+                    PolicyId = policy.Id,
+                    SetStatus = true
+                })
+                .Concat(request.OffPlugIds.Select(id => new PlugPolicy
+                {
+                    PlugId = id,
+                    PolicyId = policy.Id,
+                    SetStatus = false
+                }))
+                .ToList();
+
+        policy.PlugPolicies = plugPoliciesToAdd;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new EditPolicyResponse
+        {
+            Message = "Successfully edited policy " + policy.Name
+        };
+    }
+
+    public async Task<TogglePolicyResponse> TogglePolicy(TogglePolicyRequest request, CancellationToken cancellationToken)
+    {
+        var policy = await _dbContext.Policies
+            .FirstOrDefaultAsync(x => x.Id == request.PolicyId, cancellationToken);
+
+        if (policy == null)
+            throw new KeyNotFoundException($"No policy of id {request.PolicyId} was found");
+
+        if (policy.IsActive == request.Enable)
+        {
+            return new TogglePolicyResponse
+            {
+                Message = "Policy is already " + (policy.IsActive ? "active." : "inactive.")
+            };
+        }
+
+        policy.IsActive = request.Enable;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new TogglePolicyResponse
+        {
+            Message = "Policy successfully toggled " + (request.Enable ? "active." : "inactive.")
         };
     }
 }
