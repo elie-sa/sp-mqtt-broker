@@ -24,6 +24,7 @@ using SPBackend.Requests.Queries.GetSchedules;
 using SPBackend.Requests.Queries.GetSchedulesByDay;
 using SPBackend.Requests.Queries.GetSchedulesNextDays;
 using SPBackend.Services.CurrentUser;
+using SPBackend.Services.Mqtt;
 using SPBackend.Services.MQTTService;
 
 namespace SPBackend.Services.Plugs;
@@ -491,49 +492,59 @@ public class PlugsService
          var user = await _dbContext.Users
                 .FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
         
-            if (user == null) throw new ArgumentException("User not found");
+        if (user == null) throw new ArgumentException("User not found");
         
-            var today = DateOnly.FromDateTime(DateTime.Now);
-        
-            var query = _dbContext.Schedules
+        var today = DateOnly.FromDateTime(DateTime.Now);
+
+        var query = new List<Schedule>();
+
+        if (request.PlugId == null)
+        {
+            query = await _dbContext.Schedules
                 .AsNoTracking()
                 .Include(s => s.PlugControls)
-                .Where(s => DateOnly.FromDateTime(s.Time) >= today);
+                .Where(s => DateOnly.FromDateTime(s.Time) >= today).Distinct().ToListAsync(cancellationToken);
+        }
+        else
+        {
+            query = await _dbContext.Schedules
+                .AsNoTracking()
+                .Include(s => s.PlugControls)
+                .Where(s => DateOnly.FromDateTime(s.Time) >= today && s.PlugControls.Any(pc => pc.PlugId == request.PlugId)).Distinct().ToListAsync(cancellationToken);
+        }
         
-            var nextDates = await query
-                .Select(s => DateOnly.FromDateTime(s.Time))
-                .Distinct()
-                .OrderBy(d => d)
-                .Take(2)
-                .ToListAsync(cancellationToken);
-        
-            if (nextDates.Count == 0)
+        var nextDates = query
+            .Select(s => DateOnly.FromDateTime(s.Time))
+            .Distinct()
+            .OrderBy(d => d)
+            .Take(2);
+    
+        if (!nextDates.Any())
+        {
+            return new GetSchedulesNextDaysResponse { Days = new List<DaySchedulesDto>() };
+        }
+
+        var schedules = query
+            .Where(s => nextDates.Contains(DateOnly.FromDateTime(s.Time)));
+    
+        var days = schedules
+            .GroupBy(s => DateOnly.FromDateTime(s.Time))
+            .OrderBy(g => g.Key)
+            .Select(g => new DaySchedulesDto
             {
-                return new GetSchedulesNextDaysResponse { Days = new List<DaySchedulesDto>() };
-            }
-        
-            var schedules = await query
-                .Where(s => nextDates.Contains(DateOnly.FromDateTime(s.Time)))
-                .ToListAsync(cancellationToken);
-        
-            var days = schedules
-                .GroupBy(s => DateOnly.FromDateTime(s.Time))
-                .OrderBy(g => g.Key)
-                .Select(g => new DaySchedulesDto
+                Date = g.Key,
+                Schedules = g.Select(s => new ScheduleDto
                 {
-                    Date = g.Key,
-                    Schedules = g.Select(s => new ScheduleDto
-                    {
-                        Id = s.Id,
-                        Name = s.Name,
-                        DeviceCount = s.PlugControls.Count,
-                        Time = s.Time,
-                        IsActive = s.IsActive
-                    }).ToList()
-                })
-                .ToList();
-        
-            return new GetSchedulesNextDaysResponse { Days = days };
+                    Id = s.Id,
+                    Name = s.Name,
+                    DeviceCount = s.PlugControls.Count,
+                    Time = s.Time,
+                    IsActive = s.IsActive
+                }).ToList()
+            })
+            .ToList();
+    
+        return new GetSchedulesNextDaysResponse { Days = days };
     }
 
     public async Task<DeletePolicyResponse> DeletePolicy(long requestPolicyId, CancellationToken cancellationToken)

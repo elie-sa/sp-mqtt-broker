@@ -8,6 +8,7 @@ using SPBackend.Requests.Commands.SetPlug;
 using SPBackend.Requests.Commands.SetPlugName;
 using SPBackend.Requests.Queries.GetAllPlugs;
 using SPBackend.Requests.Queries.GetPlugDetails;
+using SPBackend.Services.Mqtt;
 using SPBackend.Services.MQTTService;
 
 namespace SPBackend.Controllers;
@@ -40,7 +41,6 @@ public class PlugController : ControllerBase
     }
     
     //Test endpoint
-    [Authorize]
     [HttpPost("testPublish")]
     public async Task<IActionResult> Publish([FromQuery] string topic, [FromQuery] string message)
     {

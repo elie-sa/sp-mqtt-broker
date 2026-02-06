@@ -1,16 +1,19 @@
 using System.Text;
 using MQTTnet;
 using MQTTnet.Client;
+using SPBackend.Data;
 
-namespace SPBackend.Services.MQTTService;
+namespace SPBackend.Services.Mqtt;
 
 public class MqttService
 {
     private readonly IMqttClient _client;
     private readonly MqttClientOptions _options;
+    private readonly IAppDbContext _dbContext;
 
-    public MqttService()
+    public MqttService(IAppDbContext dbContext)
     {
+        _dbContext = dbContext;
         var factory = new MqttFactory();
         _client = factory.CreateMqttClient();
 
@@ -43,7 +46,9 @@ public class MqttService
             {
                 var topic = e.ApplicationMessage.Topic;
                 var payload = Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment);
-                    
+                
+                // _dbContext.Consumptions()
+                
                 Console.WriteLine($"Received {payload} on {topic}");
                 return Task.CompletedTask;
             };

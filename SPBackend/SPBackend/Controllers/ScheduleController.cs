@@ -40,9 +40,9 @@ public class ScheduleController: ControllerBase
     
     [HttpGet("days/upcoming")]
     [Authorize]
-    public async Task<IActionResult> GetSchedulesNextDays(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetSchedulesNextDays([FromQuery] long plugId, CancellationToken cancellationToken)
     {
-        return Ok(await _mediator.Send(new GetSchedulesNextDaysRequest(), cancellationToken));
+        return Ok(await _mediator.Send(new GetSchedulesNextDaysRequest(){ PlugId = plugId}, cancellationToken));
     }
 
     [HttpGet("{scheduleId}")]

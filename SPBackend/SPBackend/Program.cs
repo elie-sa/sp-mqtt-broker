@@ -9,6 +9,7 @@ using SPBackend.Data;
 using SPBackend.Middleware.Exceptions;
 using SPBackend.Services.CurrentUser;
 using SPBackend.Services.Mains;
+using SPBackend.Services.Mqtt;
 using SPBackend.Services.MQTTService;
 using SPBackend.Services.Plugs;
 using SPBackend.Services.Rooms;
@@ -52,7 +53,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddSingleton<MqttService>();
+builder.Services.AddScoped<MqttService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
