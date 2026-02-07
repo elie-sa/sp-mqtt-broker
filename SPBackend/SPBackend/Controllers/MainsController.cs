@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SPBackend.Requests.Queries.GetAllSources;
 using SPBackend.Requests.Queries.GetGroupedPerDayRoomConsumption;
 using SPBackend.Requests.Queries.GetPerDayRoomConsumption;
 using SPBackend.Requests.Queries.GetPlugsPerRoomOverview;
@@ -23,11 +24,19 @@ public class MainsController: ControllerBase
     }
 
     [Authorize]
-    [HttpGet("source")]
+    [HttpGet("source/current")]
     public async Task<IActionResult> GetSource()
     {
         return Ok(await _mediator.Send(new GetPowerSourceRequest()));
     }
+    
+    [Authorize]
+    [HttpGet("sources")]
+    public async Task<IActionResult> GetAllSources()
+    {
+        return Ok(await _mediator.Send(new GetAllSourcesRequest()));
+    }
+    
     
     [Authorize]
     [HttpGet("rooms/consumption/daily")]

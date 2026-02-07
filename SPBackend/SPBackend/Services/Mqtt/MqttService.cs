@@ -35,24 +35,24 @@ public class MqttService
         };
     }
 
-    public async Task ConnectAsync()
-    {
-        if (!_client.IsConnected)
+        public async Task ConnectAsync()
         {
-            await _client.ConnectAsync(_options);
-            await _client.SubscribeAsync("sample_topic");
-
-            _client.ApplicationMessageReceivedAsync += e =>
+            if (!_client.IsConnected)
             {
-                var topic = e.ApplicationMessage.Topic;
-                var payload = Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment);
-                
-                // _dbContext.Consumptions()
-                
-                Console.WriteLine($"Received {payload} on {topic}");
-                return Task.CompletedTask;
-            };
-        }
+                await _client.ConnectAsync(_options);
+                await _client.SubscribeAsync("sample_topic");
+
+                _client.ApplicationMessageReceivedAsync += e =>
+                {
+                    var topic = e.ApplicationMessage.Topic;
+                    var payload = Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment);
+                    
+                    // _dbContext.Consumptions()
+                    
+                    Console.WriteLine($"Received {payload} on {topic}");
+                    return Task.CompletedTask;
+                };
+            }
     }
 
     public Task PublishAsync(string topic, string message)

@@ -12,7 +12,9 @@ public class GetPolicyResponse
     public double? TempLessThan { get; set; }
     public long NumOfPlugs { get; set; }
     public bool IsActive { get; set; }
-    public List<SmallPlugDto> Plugs { get; set; }
+    
+    public List<SmallPlugDto> OnPlugs { get; set; } = new();
+    public List<SmallPlugDto> OffPlugs { get; set; } = new();
 }
 
 public class SmallPlugDto

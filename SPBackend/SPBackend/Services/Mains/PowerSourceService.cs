@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
 using SPBackend.DTOs;
+using SPBackend.Requests.Queries.GetAllSources;
 using SPBackend.Requests.Queries.GetGroupedPerDayRoomConsumption;
 using SPBackend.Requests.Queries.GetPerDayRoomConsumption;
 using SPBackend.Requests.Queries.GetPlugsPerRoomOverview;
@@ -110,5 +111,24 @@ public class PowerSourceService
         
         return totalRoomDetails;
     }
-    
+
+    public async Task<GetAllSourcesResponse> GetAllSources(GetAllSourcesRequest request, CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.Include(x => x.Household).ThenInclude(y => y.PowerSources).FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub));
+        var powerSources = user.Household.PowerSources.ToList();
+        if(powerSources.Count == 0) throw new ArgumentException("No PowerSources found for this user's household");
+        
+        
+        return new GetAllSourcesResponse()
+        {
+            Sources = new List<SourceDto>(powerSources.Select(x => new SourceDto()
+            {
+                Id = x.Id,
+                Name = x.Name,
+                MaxCapacity = x.MaxCapacity,
+                HouseholdId = x.HouseholdId
+            }).ToList())
+        };
+
+    }
 }
