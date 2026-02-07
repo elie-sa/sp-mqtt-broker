@@ -6,6 +6,7 @@ namespace SPBackend.Data;
 public interface IAppDbContext
 {
     public DbSet<Consumption> Consumptions { get; set; }
+    public DbSet<RecentConsumption> RecentConsumptions { get; set; }
     public DbSet<DeviceType> DeviceTypes { get; set; }
     public DbSet<Household> Households { get; set; }
     public DbSet<MainsLog> MainsLogs { get; set; }

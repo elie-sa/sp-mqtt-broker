@@ -45,12 +45,18 @@ public class PlugsService
     public async Task<GetPlugDetailsResponse> GetPlugDetails(long plugId,
         CancellationToken cancellationToken)
     {
-        var plug = await _dbContext.Plugs.Include(x => x.Consumptions).Include(y => y.PlugControls).ThenInclude(z => z.Schedule).FirstOrDefaultAsync(x => x.Id == plugId, cancellationToken);
+        var plug = await _dbContext.Plugs
+            .Include(x => x.Consumptions)
+            .Include(y => y.PlugControls)
+            .ThenInclude(z => z.Schedule)
+            .FirstOrDefaultAsync(x => x.Id == plugId, cancellationToken);
         if(plug == null) throw new KeyNotFoundException("No plug was found");
 
-        var currentConsumption = plug.Consumptions.OrderBy(x => x.Time).FirstOrDefault(x => x.Time >= DateTime.Now.AddSeconds(-20));
-        var currentConsumptionValue = currentConsumption?.TotalEnergy ?? 0;
-        var isDeviceConnected = currentConsumption != null;
+        var recentConsumption = await _dbContext.RecentConsumptions
+            .OrderByDescending(x => x.Time)
+            .FirstOrDefaultAsync(x => x.PlugId == plugId, cancellationToken);
+        var currentConsumptionValue = recentConsumption?.TotalEnergy ?? 0;
+        var isDeviceConnected = recentConsumption != null && recentConsumption.Time >= DateTime.UtcNow.AddSeconds(-20);
 
         var schedules = new List<ScheduleViewModel>();
         foreach (var plugControl in plug.PlugControls)

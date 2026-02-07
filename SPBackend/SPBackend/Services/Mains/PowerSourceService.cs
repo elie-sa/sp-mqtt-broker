@@ -54,7 +54,7 @@ public class PowerSourceService
            groupedRoomConsumption.RoomType = roomPerRoomType.Key;
            long consumption = roomPerRoomType.Sum(room => room.Plugs
                .SelectMany(plug => plug.Consumptions)
-               .Where(consumption => consumption.Time.Date == DateTime.Today.Date)
+               .Where(consumption => consumption.Time.Date == DateTime.Today.Date && consumption.Time.TimeOfDay == TimeSpan.Zero)
                .Sum(consumption => consumption.TotalEnergy));
            groupedRoomConsumption.Consumption = consumption;
            groupedPerDayRoomConsumption.GroupedRooms.Add(groupedRoomConsumption);
@@ -74,7 +74,7 @@ public class PowerSourceService
         {
             var totalEnergyConsumption = room.Plugs
                 .SelectMany(plug => plug.Consumptions)
-                .Where(consumption => consumption.Time.Date == DateTime.Today.Date)
+                .Where(consumption => consumption.Time.Date == DateTime.Today.Date && consumption.Time.TimeOfDay == TimeSpan.Zero)
                 .Sum(consumption => consumption.TotalEnergy);
             
             perDayRoomConsumption.Rooms.Add(new RoomConsumption()
