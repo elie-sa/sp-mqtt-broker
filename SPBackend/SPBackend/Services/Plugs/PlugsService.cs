@@ -447,10 +447,10 @@ public class PlugsService
                         Id = policy.Id,
                         Name = policy.Name,
                         PowerSourceId = policy.PowerSourceId,
-                        PowerSourceName = policy.PowerSource!.Name,
+                        PowerSourceName = (policy.PowerSource == null) ? null : policy.PowerSource!.Name,
                         IsActive = policy.IsActive,
                         TempGreaterThan = policy.TempGreaterThan,
-                        TempLessThan = policy.TempLessThan,
+                        TempLessThan = policy.TempGreaterThan, 
                         NumOfPlugs = g.Count()
                     };
                 }).ToList()
@@ -464,8 +464,7 @@ public class PlugsService
         var plugPolicies = await _dbContext.PlugPolicies.Where(x => x.PolicyId == requestPolicyId && x.SetStatus == true)
             .Include(x => x.Plug).ToListAsync(cancellationToken);   
         if(plugPolicies == null) throw new Exception("No plug policies found.");
-
-
+        
         var output = new GetPolicyResponse()
         {
             Id = policy.Id,
@@ -474,7 +473,7 @@ public class PlugsService
             TempGreaterThan = policy.TempGreaterThan,
             TempLessThan = policy.TempLessThan,
             PowerSourceId = policy.PowerSourceId,
-            PowerSourceName = policy.PowerSource!.Name,
+            PowerSourceName = (policy.PowerSource == null) ? null : policy.PowerSource!.Name,
             NumOfPlugs = plugPolicies.Count(),
             OnPlugs = (
                 plugPolicies.Where(x => x.SetStatus).Select(x => new SmallPlugDto()

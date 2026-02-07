@@ -53,7 +53,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddScoped<MqttService>();
+builder.Services.AddSingleton<MqttService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
@@ -96,14 +96,7 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.MapControllers();
-
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-
-app.UseExceptionHandler(options => {});
+app.UseExceptionHandler(_ => { });
 
 app.UseHttpsRedirection();
 
@@ -114,7 +107,7 @@ app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var db = (AppDbContext)scope.ServiceProvider.GetRequiredService<IAppDbContext>();
     db.Database.Migrate();
 }
 

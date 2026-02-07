@@ -9,11 +9,11 @@ public class MqttService
 {
     private readonly IMqttClient _client;
     private readonly MqttClientOptions _options;
-    private readonly IAppDbContext _dbContext;
+    private readonly IServiceScopeFactory _scopeFactory; 
 
-    public MqttService(IAppDbContext dbContext)
+    public MqttService(IServiceScopeFactory scopeFactory)
     {
-        _dbContext = dbContext;
+        _scopeFactory = scopeFactory;
         var factory = new MqttFactory();
         _client = factory.CreateMqttClient();
 
@@ -41,13 +41,15 @@ public class MqttService
             {
                 await _client.ConnectAsync(_options);
                 await _client.SubscribeAsync("sample_topic");
-
+                using var scope = _scopeFactory.CreateScope();
+                var _dbContext = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
+                
                 _client.ApplicationMessageReceivedAsync += e =>
                 {
                     var topic = e.ApplicationMessage.Topic;
                     var payload = Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment);
-                    
-                    // _dbContext.Consumptions()
+
+                    // _dbContext.Consumptions.Add();
                     
                     Console.WriteLine($"Received {payload} on {topic}");
                     return Task.CompletedTask;
