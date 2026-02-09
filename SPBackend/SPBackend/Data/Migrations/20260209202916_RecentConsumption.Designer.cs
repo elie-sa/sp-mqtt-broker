@@ -12,8 +12,8 @@ using SPBackend.Data;
 namespace SPBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260207195750_AddRecentConsumption")]
-    partial class AddRecentConsumption
+    [Migration("20260209202916_RecentConsumption")]
+    partial class RecentConsumption
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
