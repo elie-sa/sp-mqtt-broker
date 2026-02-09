@@ -1,4 +1,5 @@
-using System.Text;
+using Hangfire;
+using Hangfire.MemoryStorage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -76,6 +77,13 @@ builder.Services.AddScoped<PowerSourceService>();
 builder.Services.AddScoped<RoomsService>();
 builder.Services.AddScoped<PlugsService>();
 
+//Adding Hangfire
+builder.Services.AddHangfire(config =>
+    config.UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UseMemoryStorage());
+builder.Services.AddHangfireServer();
+
 // Adding authentication
 builder.Services.AddAuthorization();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -103,6 +111,8 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseHangfireDashboard("/hangfire");
 
 app.MapControllers();
 
