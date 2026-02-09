@@ -595,7 +595,7 @@ public class PlugsService
 
         policy.Name = request.Name;
         var powerSource = _dbContext.PowerSources.FirstOrDefault(x => x.Id == policy.PowerSourceId);
-        if (powerSource == null) throw new ArgumentException("Invalid power source id provided");
+        if (powerSource == null && request.PowerSourceId != 0) throw new ArgumentException("Invalid power source id provided");
         policy.PowerSourceId = request.PowerSourceId;
         policy.TempGreaterThan = request.TempGreaterThan;
         policy.TempLessThan = request.TempLessThan;
