@@ -525,7 +525,7 @@ public class PlugsService
 
         var query = new List<Schedule>();
 
-        if (request.PlugId == null)
+        if (request.PlugId == null || request.PlugId <= 0)
         {
             query = await _dbContext.Schedules
                 .AsNoTracking()
@@ -544,7 +544,7 @@ public class PlugsService
             .Select(s => DateOnly.FromDateTime(s.Time))
             .Distinct()
             .OrderBy(d => d)
-            .Take(2);
+            .Take(2).ToList();
     
         if (!nextDates.Any())
         {
