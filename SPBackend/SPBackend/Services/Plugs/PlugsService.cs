@@ -577,6 +577,9 @@ public class PlugsService
         if (policy == null)
             throw new KeyNotFoundException($"No policy of id {request.Id} was found");
 
+        if (request.PowerSourceId == null && request.TempGreaterThan == null && request.TempLessThan == null)
+            throw new ArgumentException("A policy condition needs to be provided.");
+        
         var user = await _dbContext.Users
             .FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
 
@@ -595,7 +598,7 @@ public class PlugsService
 
         policy.Name = request.Name;
         var powerSource = _dbContext.PowerSources.FirstOrDefault(x => x.Id == policy.PowerSourceId);
-        if (powerSource == null && request.PowerSourceId != 0) throw new ArgumentException("Invalid power source id provided");
+        if (powerSource == null && request.PowerSourceId != null) throw new ArgumentException("Invalid power source id provided");
         policy.PowerSourceId = request.PowerSourceId;
         policy.TempGreaterThan = request.TempGreaterThan;
         policy.TempLessThan = request.TempLessThan;
