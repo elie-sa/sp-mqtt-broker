@@ -456,7 +456,7 @@ public class PlugsService
                         PowerSourceName = (policy.PowerSource == null) ? null : policy.PowerSource!.Name,
                         IsActive = policy.IsActive,
                         TempGreaterThan = policy.TempGreaterThan,
-                        TempLessThan = policy.TempGreaterThan, 
+                        TempLessThan = policy.TempLessThan, 
                         NumOfPlugs = g.Count()
                     };
                 }).ToList()
