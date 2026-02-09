@@ -597,7 +597,7 @@ public class PlugsService
             throw new ArgumentException($"There already exists a policy with name {request.Name}.");
 
         policy.Name = request.Name;
-        var powerSource = _dbContext.PowerSources.FirstOrDefault(x => x.Id == policy.PowerSourceId);
+        var powerSource = _dbContext.PowerSources.FirstOrDefault(x => x.Id == request.PowerSourceId);
         if (powerSource == null && request.PowerSourceId != null) throw new ArgumentException("Invalid power source id provided");
         policy.PowerSourceId = request.PowerSourceId;
         policy.TempGreaterThan = request.TempGreaterThan;
