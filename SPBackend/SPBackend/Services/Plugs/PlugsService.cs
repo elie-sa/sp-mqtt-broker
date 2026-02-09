@@ -380,15 +380,31 @@ public class PlugsService
 
     public async Task<AddPolicyResponse> AddPolicy(AddPolicyRequest request, CancellationToken cancellationToken)
     {
+        if (request.PowerSourceId is null && request.TempGreaterThan is null && request.TempLessThan is null)
+            throw new ArgumentException("Either a power source or a temperature condition must be provided.");
+
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(x => x.KeyCloakId == _currentUser.Sub, cancellationToken);
+
+        if (user == null)
+            throw new ArgumentException("User not found");
+
+        var hasDuplicateName = await _dbContext.Policies
+            .AsNoTracking()
+            .AnyAsync(p =>
+                p.Name == request.Name &&
+                p.PlugPolicies.Any(pp => pp.Plug.Room.Household.Users.Any(u => u.Id == user.Id)),
+                cancellationToken);
+
+        if (hasDuplicateName)
+            throw new ArgumentException($"There already exists a policy with name {request.Name}.");
+
         var policyToAdd = new Policy
         {
             Name = request.Name,
             IsActive = request.IsActive
         };
 
-        if (request.PowerSourceId is null && request.TempGreaterThan is null && request.TempLessThan is null)
-            throw new ArgumentException("Either a power source or a temperature condition must be provided.");
-            
         if(request.PowerSourceId != null) policyToAdd.PowerSourceId = request.PowerSourceId;
         if(request.TempGreaterThan != null) policyToAdd.TempGreaterThan = request.TempGreaterThan;
         if(request.TempLessThan != null) policyToAdd.TempLessThan = request.TempLessThan;
@@ -586,14 +602,14 @@ public class PlugsService
         if (user == null)
             throw new ArgumentException("User not found");
 
-        var otherPolicies = await _dbContext.Policies
-            .Where(p =>
-                p.PlugPolicies.Any(pp =>
-                    pp.Plug.Room.Household.Users.Any(u => u.Id == user.Id)
-                ) && p.Id != policy.Id)
-            .ToListAsync(cancellationToken);
+        var hasDuplicateName = await _dbContext.Policies
+            .AsNoTracking()
+            .AnyAsync(p =>
+                    p.Name == request.Name &&
+                    p.PlugPolicies.Any(pp => pp.Plug.Room.Household.Users.Any(u => u.Id == user.Id)),
+                cancellationToken);
 
-        if (otherPolicies.Any(p => p.Name == request.Name))
+        if (hasDuplicateName)
             throw new ArgumentException($"There already exists a policy with name {request.Name}.");
 
         policy.Name = request.Name;

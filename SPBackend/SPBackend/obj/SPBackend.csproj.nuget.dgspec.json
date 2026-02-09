@@ -1,31 +1,25 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Esawm\\Desktop\\FYP Projects\\sp-mqtt-broker\\SPBackend\\SPBackend\\SPBackend.csproj": {}
+    "/Users/elie-sa/Desktop/sp-mqtt-broker/SPBackend/SPBackend/SPBackend.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Esawm\\Desktop\\FYP Projects\\sp-mqtt-broker\\SPBackend\\SPBackend\\SPBackend.csproj": {
+    "/Users/elie-sa/Desktop/sp-mqtt-broker/SPBackend/SPBackend/SPBackend.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Esawm\\Desktop\\FYP Projects\\sp-mqtt-broker\\SPBackend\\SPBackend\\SPBackend.csproj",
+        "projectUniqueName": "/Users/elie-sa/Desktop/sp-mqtt-broker/SPBackend/SPBackend/SPBackend.csproj",
         "projectName": "SPBackend",
-        "projectPath": "C:\\Users\\Esawm\\Desktop\\FYP Projects\\sp-mqtt-broker\\SPBackend\\SPBackend\\SPBackend.csproj",
-        "packagesPath": "C:\\Users\\Esawm\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Esawm\\Desktop\\FYP Projects\\sp-mqtt-broker\\SPBackend\\SPBackend\\obj\\",
+        "projectPath": "/Users/elie-sa/Desktop/sp-mqtt-broker/SPBackend/SPBackend/SPBackend.csproj",
+        "packagesPath": "/Users/elie-sa/.nuget/packages/",
+        "outputPath": "/Users/elie-sa/Desktop/sp-mqtt-broker/SPBackend/SPBackend/obj/",
         "projectStyle": "PackageReference",
-        "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
-        ],
         "configFilePaths": [
-          "C:\\Users\\Esawm\\AppData\\Roaming\\NuGet\\NuGet.Config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
-          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+          "/Users/elie-sa/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net9.0"
         ],
         "sources": {
-          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -42,14 +36,26 @@
         "restoreAuditProperties": {
           "enableAudit": "true",
           "auditLevel": "low",
-          "auditMode": "all"
+          "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
         "net9.0": {
           "targetAlias": "net9.0",
           "dependencies": {
+            "Hangfire.AspNetCore": {
+              "target": "Package",
+              "version": "[1.8.23, )"
+            },
+            "Hangfire.MemoryStorage": {
+              "target": "Package",
+              "version": "[1.8.0, )"
+            },
+            "Hangfire.SqlServer": {
+              "target": "Package",
+              "version": "[1.8.23, )"
+            },
             "MQTTnet": {
               "target": "Package",
               "version": "[4.3.7.1207, )"
@@ -104,7 +110,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.100/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.310/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

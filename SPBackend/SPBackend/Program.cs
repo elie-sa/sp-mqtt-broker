@@ -4,14 +4,11 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using MQTTnet;
-using MQTTnet.Client;
 using SPBackend.Data;
 using SPBackend.Middleware.Exceptions;
 using SPBackend.Services.CurrentUser;
 using SPBackend.Services.Mains;
 using SPBackend.Services.Mqtt;
-using SPBackend.Services.MQTTService;
 using SPBackend.Services.Plugs;
 using SPBackend.Services.Rooms;
 
@@ -101,7 +98,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 var app = builder.Build();
-
+app.UseRouting();
 app.UseSwagger();
 app.UseSwaggerUI();
 
