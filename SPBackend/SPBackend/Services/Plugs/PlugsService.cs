@@ -606,8 +606,8 @@ public class PlugsService
             .AsNoTracking()
             .AnyAsync(p =>
                     p.Name == request.Name &&
-                    p.PlugPolicies.Any(pp => pp.Plug.Room.Household.Users.Any(u => u.Id == user.Id)),
-                cancellationToken);
+                    p.PlugPolicies.Any(pp => pp.Plug.Room.Household.Users.Any(u => u.Id == user.Id)) 
+                    && p.Id != request.Id, cancellationToken);
 
         if (hasDuplicateName)
             throw new ArgumentException($"There already exists a policy with name {request.Name}.");
