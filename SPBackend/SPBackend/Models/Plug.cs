@@ -7,6 +7,7 @@ public class Plug
     public bool IsOn { get; set; }
     public bool IsConstant { get; set; }
     public TimeSpan? Timeout { get; set; }
+    public double? ConstantConsumption { get; set; }
     public Room Room { get; set; }
     public long RoomId { get; set; }
     public DeviceType DeviceType { get; set; }

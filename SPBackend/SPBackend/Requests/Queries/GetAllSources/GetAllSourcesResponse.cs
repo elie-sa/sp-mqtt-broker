@@ -9,6 +9,6 @@ public class SourceDto
 {
     public long Id { get; set; }
     public string Name { get; set; }
-    public long MaxCapacity { get; set; }
+    public double MaxCapacity { get; set; }
     public long HouseholdId { get; set; }
 }

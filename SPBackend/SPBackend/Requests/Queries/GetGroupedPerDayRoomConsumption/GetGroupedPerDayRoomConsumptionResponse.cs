@@ -7,5 +7,5 @@ public class GetGroupedPerDayRoomConsumptionResponse
 public class GroupedRoomConsumption
 {
     public string RoomType { get; set; }
-    public long Consumption { get; set; }
+    public double Consumption { get; set; }
 }

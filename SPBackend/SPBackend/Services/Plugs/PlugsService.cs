@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
 using SPBackend.DTOs;
@@ -89,12 +90,30 @@ public class PlugsService
     {
         //TODO: Should i add an ack??
         //TODO: Add the constant plug logic
-        var plug = _dbContext.Plugs.FirstOrDefault(x => x.Id.Equals(request.PlugId));
+        var plug = _dbContext.Plugs.Include(x => x.Room).FirstOrDefault(x => x.Id.Equals(request.PlugId));
         if (plug == null) throw new KeyNotFoundException("No plug was found");
         if (plug.IsOn.Equals(request.SwitchOn)) return new SetPlugResponse(){ Message = request.SwitchOn ? "Plug was already on." : "Plug was already off." };
+
+        if (plug.IsConstant)
+        {
+            var recentMainsLog = _dbContext.MainsLogs.Include(x => x.PowerSource).Where(x => x.HouseholdId == plug.Room.HouseholdId && x.Time <= DateTime.UtcNow.AddSeconds(-20))
+                .OrderBy(log => log.Time).Take(1).FirstOrDefault();
+            if(recentMainsLog == null)
+                throw new Exception("No recent mains logs were found");
+
+            var sumOfConsumptions = _dbContext.Consumptions.Where(x => x.Plug.Room.HouseholdId == plug.Room.HouseholdId)
+                .Sum(x => x.TotalEnergy);
+            // 1.1 as an error margin
+            if ((recentMainsLog.PowerSource.MaxCapacity) > 1.1 * (sumOfConsumptions + plug.ConstantConsumption))
+            {
+                throw new Exception("Plug cannot be turned on because of ");
+            }
+            
+        }
         
         await _mqttService.ConnectAsync();
         await _mqttService.PublishAsync($"home/plug/{request.PlugId}", request.SwitchOn ? "\"on\": true" : "\"on\": false");
+        
         plug.IsOn = request.SwitchOn;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return new SetPlugResponse(){ Message = request.SwitchOn ? "Plug switched on." : "Plug switched off." };
