@@ -214,19 +214,19 @@ public class MqttService
                     continue;
                 }
 
-                if (!TryGetLongProperty(plugElement, ["plugId", "plug_id", "id", "deviceId", "device_id"], out var plugId))
+                if (!TryGetDoubleProperty(plugElement, ["plugId", "plug_id", "id", "deviceId", "device_id"], out var plugId))
                 {
                     continue;
                 }
 
-                if (!TryGetLongProperty(plugElement, ["consumption", "energy", "totalEnergy", "total_energy", "power"], out var totalEnergy))
+                if (!TryGetDoubleProperty(plugElement, ["consumption", "energy", "totalEnergy", "total_energy", "power"], out var totalEnergy))
                 {
                     continue;
                 }
 
                 var consumption = new Consumption
                 {
-                    PlugId = plugId,
+                    PlugId = (long)plugId,
                     TotalEnergy = totalEnergy,
                     Time = timestamp ?? DateTime.UtcNow
                 };
@@ -235,7 +235,7 @@ public class MqttService
 
                 if (TryGetBoolProperty(plugElement, ["isOn", "is_on", "on"], out var isOn))
                 {
-                    plugStates[plugId] = isOn;
+                    plugStates[(long)plugId] = isOn;
                 }
             }
         }
@@ -251,7 +251,7 @@ public class MqttService
     {
         consumption = null!;
         long? plugId = null;
-        long? totalEnergy = null;
+        double? totalEnergy = null;
         DateTime? time = null;
 
         if (!string.IsNullOrWhiteSpace(topic))
@@ -277,12 +277,12 @@ public class MqttService
                     var root = document.RootElement;
                     if (root.ValueKind == JsonValueKind.Object)
                     {
-                        if (TryGetLongProperty(root, ["plugId", "plug_id", "deviceId", "device_id", "id"], out var parsedPlugId))
+                        if (TryGetDoubleProperty(root, ["plugId", "plug_id", "deviceId", "device_id", "id"], out var parsedPlugId))
                         {
-                            plugId = parsedPlugId;
+                            plugId = (long) parsedPlugId;
                         }
 
-                        if (TryGetLongProperty(root, ["totalEnergy", "total_energy", "energy", "consumption", "power"], out var parsedEnergy))
+                        if (TryGetDoubleProperty(root, ["totalEnergy", "total_energy", "energy", "consumption", "power"], out var parsedEnergy))
                         {
                             totalEnergy = parsedEnergy;
                         }
@@ -297,7 +297,7 @@ public class MqttService
                 {
                 }
             }
-            else if (TryParseLongFlexible(trimmed, out var parsedEnergy))
+            else if (TryParseDoubleFlexible(trimmed, out var parsedEnergy))
             {
                 totalEnergy = parsedEnergy;
             }
@@ -379,7 +379,7 @@ public class MqttService
         return false;
     }
 
-    private static bool TryGetLongProperty(JsonElement root, string[] names, out long value)
+    private static bool TryGetDoubleProperty(JsonElement root, string[] names, out double value)
     {
         foreach (var prop in root.EnumerateObject())
         {
@@ -390,7 +390,7 @@ public class MqttService
                     continue;
                 }
 
-                if (TryGetLongValue(prop.Value, out value))
+                if (TryGetDoubleValue(prop.Value, out value))
                 {
                     return true;
                 }
@@ -423,14 +423,14 @@ public class MqttService
         return false;
     }
 
-    private static bool TryGetLongValue(JsonElement element, out long value)
+    private static bool TryGetDoubleValue(JsonElement element, out double value)
     {
-        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt64(out value))
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out value))
         {
             return true;
         }
 
-        if (element.ValueKind == JsonValueKind.String && TryParseLongFlexible(element.GetString() ?? string.Empty, out value))
+        if (element.ValueKind == JsonValueKind.String && TryParseDoubleFlexible(element.GetString() ?? string.Empty, out value))
         {
             return true;
         }
@@ -473,21 +473,21 @@ public class MqttService
         return false;
     }
 
-    private static bool TryParseLongFlexible(string value, out long result)
+    private static bool TryParseDoubleFlexible(string value, out double result)
     {
-        if (TryExtractLongFromText(value, out result))
+        if (TryExtractDoubleFromText(value, out result))
         {
             return true;
         }
 
-        if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result))
+        if (double.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result))
         {
             return true;
         }
 
         if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var floatValue))
         {
-            result = Convert.ToInt64(Math.Round(floatValue));
+            result = floatValue;
             return true;
         }
 
@@ -495,7 +495,7 @@ public class MqttService
         return false;
     }
 
-    private static bool TryExtractLongFromText(string value, out long result)
+    private static bool TryExtractDoubleFromText(string value, out double result)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -510,7 +510,7 @@ public class MqttService
             return false;
         }
 
-        return long.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
+        return double.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
     }
 
     private static DateTime? FromEpoch(long epoch)
