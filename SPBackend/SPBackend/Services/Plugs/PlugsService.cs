@@ -112,7 +112,7 @@ public class PlugsService
         }
         
         await _mqttService.ConnectAsync();
-        await _mqttService.PublishAsync($"home/plug/{request.PlugId}", request.SwitchOn ? "\"on\": true" : "\"on\": false");
+        await _mqttService.PublishAsync($"home/plug/{request.PlugId}", request.SwitchOn ? "ON" : "OFF");
         
         plug.IsOn = request.SwitchOn;
         await _dbContext.SaveChangesAsync(cancellationToken);
