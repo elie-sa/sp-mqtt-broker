@@ -475,24 +475,22 @@ public class MqttService
 
     private static bool TryParseDoubleFlexible(string value, out double result)
     {
-        if (TryExtractDoubleFromText(value, out result))
+        if (string.IsNullOrWhiteSpace(value))
         {
-            return true;
+            result = 0;
+            return false;
         }
 
-        if (double.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result))
-        {
-            return true;
-        }
+        var trimmed = value.Trim();
 
-        if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var floatValue))
-        {
-            result = floatValue;
-            return true;
-        }
+        var cleaned = new string(trimmed.Where(c => char.IsDigit(c) || c == '.' || c == '-').ToArray());
 
-        result = 0;
-        return false;
+        return double.TryParse(
+            cleaned,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out result
+        );
     }
 
     private static bool TryExtractDoubleFromText(string value, out double result)
