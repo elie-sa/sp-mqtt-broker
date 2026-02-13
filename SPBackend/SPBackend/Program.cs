@@ -51,7 +51,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddSingleton<MqttService>();
+builder.Services.AddSingleton<IMqttService, MqttService>();
 builder.Services.AddHostedService<MqttHostedService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();

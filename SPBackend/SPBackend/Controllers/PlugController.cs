@@ -9,7 +9,6 @@ using SPBackend.Requests.Commands.SetPlugName;
 using SPBackend.Requests.Queries.GetAllPlugs;
 using SPBackend.Requests.Queries.GetPlugDetails;
 using SPBackend.Services.Mqtt;
-using SPBackend.Services.MQTTService;
 
 namespace SPBackend.Controllers;
 
@@ -18,9 +17,9 @@ namespace SPBackend.Controllers;
 public class PlugController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly MqttService _mqttService;
+    private readonly IMqttService _mqttService;
 
-    public PlugController(MqttService mqttService, IMediator mediator)
+    public PlugController(IMqttService mqttService, IMediator mediator)
     {
         _mqttService = mqttService;
         _mediator = mediator;

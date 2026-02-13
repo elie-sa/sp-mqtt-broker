@@ -34,10 +34,10 @@ public class PlugsService
 {
     private readonly IAppDbContext _dbContext;
     private readonly ICurrentUser _currentUser;
-    private readonly MqttService _mqttService;
+    private readonly IMqttService _mqttService;
     private readonly IBackgroundJobClient _backgroundJobClient;
 
-    public PlugsService(IAppDbContext dbContext, ICurrentUser currentUser, MqttService mqttService, IBackgroundJobClient backgroundJobClient)
+    public PlugsService(IAppDbContext dbContext, ICurrentUser currentUser, IMqttService mqttService, IBackgroundJobClient backgroundJobClient)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;

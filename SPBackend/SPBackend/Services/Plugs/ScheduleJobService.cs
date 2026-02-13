@@ -8,9 +8,9 @@ namespace SPBackend.Services.Plugs;
 public class ScheduleJobService
 {
     private readonly IAppDbContext _dbContext;
-    private readonly MqttService _mqttService;
+    private readonly IMqttService _mqttService;
 
-    public ScheduleJobService(IAppDbContext dbContext, MqttService mqttService)
+    public ScheduleJobService(IAppDbContext dbContext, IMqttService mqttService)
     {
         _dbContext = dbContext;
         _mqttService = mqttService;

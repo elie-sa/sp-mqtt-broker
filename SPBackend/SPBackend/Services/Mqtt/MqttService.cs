@@ -9,7 +9,7 @@ using SPBackend.Models;
 
 namespace SPBackend.Services.Mqtt;
 
-public class MqttService
+public class MqttService : IMqttService
 {
     private const double MinimumConsumptionThreshold = 5;
     private readonly IMqttClient _client;

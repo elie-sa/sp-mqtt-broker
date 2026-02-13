@@ -4,9 +4,9 @@ namespace SPBackend.Services.Mqtt;
 
 public class MqttHostedService : IHostedService
 {
-    private readonly MqttService _mqttService;
+    private readonly IMqttService _mqttService;
 
-    public MqttHostedService(MqttService mqttService)
+    public MqttHostedService(IMqttService mqttService)
     {
         _mqttService = mqttService;
     }
