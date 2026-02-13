@@ -1,3 +1,4 @@
+using System.Globalization;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
@@ -155,6 +156,10 @@ public class PlugsService
         if (plug == null) throw new KeyNotFoundException("No plug was found");
         
         plug.Timeout = request.Timeout;
+        await _mqttService.ConnectAsync();
+        await _mqttService.PublishAsync(
+            $"home/plug/{request.PlugId}/timeout",
+            request.Timeout.TotalSeconds.ToString(CultureInfo.InvariantCulture));
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new AddTimeoutResponse() { Message = $"Successfully added timeout of {plug.Timeout} to plug {plug.Id}" };
