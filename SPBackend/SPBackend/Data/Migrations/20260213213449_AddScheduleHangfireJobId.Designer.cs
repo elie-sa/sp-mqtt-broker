@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SPBackend.Data;
@@ -11,9 +12,11 @@ using SPBackend.Data;
 namespace SPBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260213213449_AddScheduleHangfireJobId")]
+    partial class AddScheduleHangfireJobId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -43,7 +46,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("PlugId");
 
-                    b.ToTable("Consumptions", (string)null);
+                    b.ToTable("Consumptions");
                 });
 
             modelBuilder.Entity("SPBackend.Models.DeviceType", b =>
@@ -60,7 +63,7 @@ namespace SPBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DeviceTypes", (string)null);
+                    b.ToTable("DeviceTypes");
                 });
 
             modelBuilder.Entity("SPBackend.Models.Household", b =>
@@ -77,7 +80,7 @@ namespace SPBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Households", (string)null);
+                    b.ToTable("Households");
                 });
 
             modelBuilder.Entity("SPBackend.Models.MainsLog", b =>
@@ -109,7 +112,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("PowerSourceId");
 
-                    b.ToTable("MainsLogs", (string)null);
+                    b.ToTable("MainsLogs");
                 });
 
             modelBuilder.Entity("SPBackend.Models.Plug", b =>
@@ -148,7 +151,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("RoomId");
 
-                    b.ToTable("Plugs", (string)null);
+                    b.ToTable("Plugs");
                 });
 
             modelBuilder.Entity("SPBackend.Models.PlugControl", b =>
@@ -174,7 +177,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("ScheduleId");
 
-                    b.ToTable("PlugControls", (string)null);
+                    b.ToTable("PlugControls");
                 });
 
             modelBuilder.Entity("SPBackend.Models.PlugPolicy", b =>
@@ -200,7 +203,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("PolicyId");
 
-                    b.ToTable("PlugPolicies", (string)null);
+                    b.ToTable("PlugPolicies");
                 });
 
             modelBuilder.Entity("SPBackend.Models.Policy", b =>
@@ -231,7 +234,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("PowerSourceId");
 
-                    b.ToTable("Policies", (string)null);
+                    b.ToTable("Policies");
                 });
 
             modelBuilder.Entity("SPBackend.Models.PowerSource", b =>
@@ -256,7 +259,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("HouseholdId");
 
-                    b.ToTable("PowerSources", (string)null);
+                    b.ToTable("PowerSources");
                 });
 
             modelBuilder.Entity("SPBackend.Models.RecentConsumption", b =>
@@ -280,7 +283,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("PlugId");
 
-                    b.ToTable("RecentConsumptions", (string)null);
+                    b.ToTable("RecentConsumptions");
                 });
 
             modelBuilder.Entity("SPBackend.Models.Room", b =>
@@ -307,7 +310,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("RoomTypeId");
 
-                    b.ToTable("Rooms", (string)null);
+                    b.ToTable("Rooms");
                 });
 
             modelBuilder.Entity("SPBackend.Models.RoomType", b =>
@@ -324,7 +327,7 @@ namespace SPBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("RoomTypes", (string)null);
+                    b.ToTable("RoomTypes");
                 });
 
             modelBuilder.Entity("SPBackend.Models.Schedule", b =>
@@ -350,7 +353,7 @@ namespace SPBackend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Schedules", (string)null);
+                    b.ToTable("Schedules");
                 });
 
             modelBuilder.Entity("SPBackend.Models.User", b =>
@@ -372,7 +375,7 @@ namespace SPBackend.Migrations
 
                     b.HasIndex("HouseholdId");
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("SPBackend.Models.Consumption", b =>

@@ -8,5 +8,6 @@ public class Schedule
     public string Name { get; set; }
     public DateTime Time { get; set; }
     public bool IsActive { get; set; }
+    public string? HangfireJobId { get; set; }
     public ICollection<PlugControl> PlugControls { get; set; }
 }

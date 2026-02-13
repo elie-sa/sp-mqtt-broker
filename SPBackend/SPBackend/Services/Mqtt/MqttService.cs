@@ -11,6 +11,7 @@ namespace SPBackend.Services.Mqtt;
 
 public class MqttService
 {
+    private const double MinimumConsumptionThreshold = 5;
     private readonly IMqttClient _client;
     private readonly MqttClientOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -106,12 +107,29 @@ public class MqttService
 
         if (isBatch)
         {
+            if (batchConsumptions.Count == 0 && batchPlugStates.Count == 0)
+            {
+                return;
+            }
+
             await ApplyConsumptionsAsync(dbContext, batchConsumptions, batchPlugStates);
             Console.WriteLine($"Saved {batchConsumptions.Count} consumptions from batch on {topic}");
             return;
         }
 
-        await ApplyConsumptionsAsync(dbContext, [singleConsumption!], new Dictionary<long, bool>());
+        if (singleConsumption!.TotalEnergy < MinimumConsumptionThreshold)
+        {
+            var plugStates = new Dictionary<long, bool>
+            {
+                [singleConsumption.PlugId] = false
+            };
+
+            await ApplyConsumptionsAsync(dbContext, Array.Empty<Consumption>(), plugStates);
+            Console.WriteLine($"Marked plug {singleConsumption.PlugId} off due to low consumption on {topic}");
+            return;
+        }
+
+        await ApplyConsumptionsAsync(dbContext, [singleConsumption], new Dictionary<long, bool>());
         Console.WriteLine($"Saved consumption {singleConsumption.TotalEnergy} for plug {singleConsumption.PlugId} on {topic}");
     }
 
@@ -224,14 +242,18 @@ public class MqttService
                     continue;
                 }
 
-                var consumption = new Consumption
+                if (totalEnergy < MinimumConsumptionThreshold)
+                {
+                    plugStates[(long)plugId] = false;
+                    continue;
+                }
+
+                consumptions.Add(new Consumption
                 {
                     PlugId = (long)plugId,
                     TotalEnergy = totalEnergy,
                     Time = timestamp ?? DateTime.UtcNow
-                };
-
-                consumptions.Add(consumption);
+                });
 
                 if (TryGetBoolProperty(plugElement, ["isOn", "is_on", "on"], out var isOn))
                 {
@@ -244,7 +266,7 @@ public class MqttService
             return false;
         }
 
-        return consumptions.Count > 0;
+        return consumptions.Count > 0 || plugStates.Count > 0;
     }
 
     private static bool TryBuildConsumption(string topic, string payload, out Consumption consumption)

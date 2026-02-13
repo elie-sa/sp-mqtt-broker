@@ -73,6 +73,8 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddScoped<PowerSourceService>();
 builder.Services.AddScoped<RoomsService>();
 builder.Services.AddScoped<PlugsService>();
+builder.Services.AddScoped<ScheduleJobService>();
+builder.Services.AddHostedService<ScheduleHangfireBootstrapper>();
 
 //Adding Hangfire
 builder.Services.AddHangfire(config =>

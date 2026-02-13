@@ -1,4 +1,4 @@
-using System.Net;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
 using SPBackend.DTOs;
@@ -26,7 +26,6 @@ using SPBackend.Requests.Queries.GetSchedulesByDay;
 using SPBackend.Requests.Queries.GetSchedulesNextDays;
 using SPBackend.Services.CurrentUser;
 using SPBackend.Services.Mqtt;
-using SPBackend.Services.MQTTService;
 
 namespace SPBackend.Services.Plugs;
 
@@ -35,12 +34,14 @@ public class PlugsService
     private readonly IAppDbContext _dbContext;
     private readonly ICurrentUser _currentUser;
     private readonly MqttService _mqttService;
+    private readonly IBackgroundJobClient _backgroundJobClient;
 
-    public PlugsService(IAppDbContext dbContext, ICurrentUser currentUser, MqttService mqttService)
+    public PlugsService(IAppDbContext dbContext, ICurrentUser currentUser, MqttService mqttService, IBackgroundJobClient backgroundJobClient)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
         _mqttService = mqttService;
+        _backgroundJobClient = backgroundJobClient;
     }
 
     public async Task<GetPlugDetailsResponse> GetPlugDetails(long plugId,
@@ -307,6 +308,9 @@ public class PlugsService
         
         await _dbContext.PlugControls.AddRangeAsync(plugControlsToAdd, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        scheduleToAdd.HangfireJobId = ScheduleHangfireJob(scheduleToAdd);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return new AddScheduleResponse(){ Message = "Successfully added schedule " + scheduleToAdd.Name };
     }
 
@@ -315,7 +319,8 @@ public class PlugsService
     {
         var schedule = await _dbContext.Schedules.FirstOrDefaultAsync(x => x.Id == scheduleId, cancellationToken);
         if (schedule == null) throw new KeyNotFoundException($"No schedule of id {scheduleId} was found");
-        
+
+        DeleteHangfireJob(schedule.HangfireJobId);
         _dbContext.Schedules.Remove(schedule);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return new DeleteScheduleResponse(){ Message = "Successfully deleted schedule " + schedule.Name };
@@ -344,7 +349,9 @@ public class PlugsService
         
         schedule.Name = request.Name;
         schedule.Time = request.Time;
-        
+
+        DeleteHangfireJob(schedule.HangfireJobId);
+        schedule.HangfireJobId = null;
         _dbContext.PlugControls.RemoveRange(schedule.PlugControls);
 
         var plugControlsToAdd =
@@ -366,6 +373,9 @@ public class PlugsService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        schedule.HangfireJobId = ScheduleHangfireJob(schedule);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         return new EditScheduleResponse { Message = "Successfully edited schedule " + schedule.Name };
     }
 
@@ -376,9 +386,46 @@ public class PlugsService
         
         if(schedule.IsActive == request.Enable) return new ToggleScheduleResponse(){ Message = "Schedule is already " + (schedule.IsActive ? "active." : "inactive.") };
         schedule.IsActive = request.Enable;
+
+        if (request.Enable)
+        {
+            schedule.HangfireJobId = ScheduleHangfireJob(schedule);
+        }
+        else
+        {
+            DeleteHangfireJob(schedule.HangfireJobId);
+            schedule.HangfireJobId = null;
+        }
         
         await _dbContext.SaveChangesAsync(cancellationToken);
         return new ToggleScheduleResponse(){ Message = "Schedule successfully toggled " + (request.Enable ? "active." : "inactive.") };
+    }
+
+    private string? ScheduleHangfireJob(Schedule schedule)
+    {
+        if (!schedule.IsActive)
+        {
+            return null;
+        }
+
+        if (schedule.Time <= DateTime.UtcNow)
+        {
+            return null;
+        }
+
+        return _backgroundJobClient.Schedule<ScheduleJobService>(
+            job => job.ExecuteSchedule(schedule.Id),
+            schedule.Time);
+    }
+
+    private void DeleteHangfireJob(string? jobId)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+        {
+            return;
+        }
+
+        _backgroundJobClient.Delete(jobId);
     }
 
     public async Task<GetAllPlugsResponse> GetAllPlugs(GetAllPlugsRequest request, CancellationToken cancellationToken)
