@@ -515,24 +515,6 @@ public class MqttService : IMqttService
         );
     }
 
-    private static bool TryExtractDoubleFromText(string value, out double result)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            result = 0;
-            return false;
-        }
-
-        var digits = new string(value.Where(char.IsDigit).ToArray());
-        if (digits.Length == 0)
-        {
-            result = 0;
-            return false;
-        }
-
-        return double.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
-    }
-
     private static DateTime? FromEpoch(long epoch)
     {
         try
