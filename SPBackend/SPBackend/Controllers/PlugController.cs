@@ -8,7 +8,6 @@ using SPBackend.Requests.Commands.SetPlug;
 using SPBackend.Requests.Commands.SetPlugName;
 using SPBackend.Requests.Queries.GetAllPlugs;
 using SPBackend.Requests.Queries.GetPlugDetails;
-using SPBackend.Services.Mqtt;
 
 namespace SPBackend.Controllers;
 
@@ -17,11 +16,9 @@ namespace SPBackend.Controllers;
 public class PlugController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly IMqttService _mqttService;
 
-    public PlugController(IMqttService mqttService, IMediator mediator)
+    public PlugController(IMediator mediator)
     {
-        _mqttService = mqttService;
         _mediator = mediator;
     }
 
@@ -39,15 +36,6 @@ public class PlugController : ControllerBase
         return Ok(await _mediator.Send(new GetPlugDetailsRequest(){ PlugId = plugId }));
     }
     
-    //Test endpoint
-    [HttpPost("testPublish")]
-    public async Task<IActionResult> Publish([FromQuery] string topic, [FromQuery] string message)
-    {
-        await _mqttService.ConnectAsync();
-        await _mqttService.PublishAsync(topic, message);
-        return Ok($"Published {message}");
-    }
-
     [Authorize]
     [HttpPut("status/set")]
     public async Task<IActionResult> SetPlug(SetPlugRequest request, CancellationToken cancellationToken)

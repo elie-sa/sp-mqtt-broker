@@ -1,19 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
 using SPBackend.Models;
-using SPBackend.Services.Mqtt;
 
 namespace SPBackend.Services.Plugs;
 
 public class ScheduleJobService
 {
     private readonly IAppDbContext _dbContext;
-    private readonly IMqttService _mqttService;
 
-    public ScheduleJobService(IAppDbContext dbContext, IMqttService mqttService)
+    public ScheduleJobService(IAppDbContext dbContext)
     {
         _dbContext = dbContext;
-        _mqttService = mqttService;
     }
 
     public async Task ExecuteSchedule(long scheduleId)
@@ -35,11 +32,6 @@ public class ScheduleJobService
         }
 
         var hasChanges = false;
-        var shouldConnect = schedule.PlugControls.Any(pc => pc.Plug.IsOn != pc.SetStatus);
-        if (shouldConnect)
-        {
-            await _mqttService.ConnectAsync();
-        }
 
         foreach (var plugControl in schedule.PlugControls)
         {
@@ -73,7 +65,6 @@ public class ScheduleJobService
                 }
             }
 
-            await _mqttService.PublishAsync($"home/plug/{plug.Id}", plugControl.SetStatus ? "ON" : "OFF");
             plug.IsOn = plugControl.SetStatus;
             hasChanges = true;
         }

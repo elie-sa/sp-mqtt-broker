@@ -1,4 +1,3 @@
-using System.Globalization;
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
@@ -26,7 +25,6 @@ using SPBackend.Requests.Queries.GetSchedules;
 using SPBackend.Requests.Queries.GetSchedulesByDay;
 using SPBackend.Requests.Queries.GetSchedulesNextDays;
 using SPBackend.Services.CurrentUser;
-using SPBackend.Services.Mqtt;
 
 namespace SPBackend.Services.Plugs;
 
@@ -34,14 +32,12 @@ public class PlugsService
 {
     private readonly IAppDbContext _dbContext;
     private readonly ICurrentUser _currentUser;
-    private readonly IMqttService _mqttService;
     private readonly IBackgroundJobClient _backgroundJobClient;
 
-    public PlugsService(IAppDbContext dbContext, ICurrentUser currentUser, IMqttService mqttService, IBackgroundJobClient backgroundJobClient)
+    public PlugsService(IAppDbContext dbContext, ICurrentUser currentUser, IBackgroundJobClient backgroundJobClient)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
-        _mqttService = mqttService;
         _backgroundJobClient = backgroundJobClient;
     }
 
@@ -113,9 +109,6 @@ public class PlugsService
             
         }
         
-        await _mqttService.ConnectAsync();
-        await _mqttService.PublishAsync($"home/plug/{request.PlugId}", request.SwitchOn ? "ON" : "OFF");
-        
         plug.IsOn = request.SwitchOn;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return new SetPlugResponse(){ Message = request.SwitchOn ? "Plug switched on." : "Plug switched off." };
@@ -156,10 +149,6 @@ public class PlugsService
         if (plug == null) throw new KeyNotFoundException("No plug was found");
         
         plug.Timeout = request.Timeout;
-        await _mqttService.ConnectAsync();
-        await _mqttService.PublishAsync(
-            $"home/plug/{request.PlugId}/timeout",
-            request.Timeout.TotalSeconds.ToString(CultureInfo.InvariantCulture));
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new AddTimeoutResponse() { Message = $"Successfully added timeout of {plug.Timeout} to plug {plug.Id}" };
