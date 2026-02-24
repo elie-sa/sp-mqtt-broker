@@ -11,5 +11,6 @@ public class GetPlugDetailsResponse
     public TimeSpan? Timeout { get; set; }
     public bool IsDeviceConnected { get; set; }
     public double CurrentConsumption { get; set; }
+    public float? CurrentTemperature { get; set; }
     public List<ScheduleViewModel> Schedules { get; set; } = new();
 }
