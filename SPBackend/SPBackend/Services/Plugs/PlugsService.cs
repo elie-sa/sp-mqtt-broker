@@ -55,6 +55,9 @@ public class PlugsService
             .OrderByDescending(x => x.Time)
             .FirstOrDefaultAsync(x => x.PlugId == plugId, cancellationToken);
         var currentConsumptionValue = recentConsumption?.TotalEnergy ?? 0;
+        var currentTemperatureValue = recentConsumption?.Temperature != null
+            ? (float?) recentConsumption.Temperature.Value
+            : null;
         var isDeviceConnected = recentConsumption != null && recentConsumption.Time >= DateTime.UtcNow.AddSeconds(-20);
 
         var schedules = new List<ScheduleViewModel>();
@@ -78,6 +81,7 @@ public class PlugsService
             Timeout = plug.Timeout,
             IsDeviceConnected = isDeviceConnected,
             CurrentConsumption = currentConsumptionValue,
+            CurrentTemperature = currentTemperatureValue,
             Schedules = schedules
         };
         

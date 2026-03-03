@@ -29,7 +29,7 @@ public class PowerSourceService
         var mainsLog = await _dbContext.MainsLogs.Include(x => x.PowerSource).OrderByDescending(p => p.Time).FirstOrDefaultAsync(x => x.HouseholdId.Equals(user.HouseholdId));
         if (mainsLog == null)
         {
-            throw new KeyNotFoundException("The household id provided is invalid or no logs have been recorded yet.");
+            throw new KeyNotFoundException("The household is invalid or no logs have been recorded yet.");
         }
         
         return new GetPowerSourceResponse()
