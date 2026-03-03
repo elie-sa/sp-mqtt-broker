@@ -9,6 +9,7 @@ using SPBackend.Middleware.Exceptions;
 using SPBackend.Services.CurrentUser;
 using SPBackend.Services.Mains;
 using SPBackend.Services.Mqtt;
+using SPBackend.Services.Outbox;
 using SPBackend.Services.Plugs;
 using SPBackend.Services.Rooms;
 
@@ -62,9 +63,19 @@ builder.Services.AddMediatR(cfg =>
 });
 
 var connectionString = builder.Configuration.GetConnectionString("PostgresConnection");
+var remoteConnectionString = builder.Configuration.GetConnectionString("RemotePostgresConnection");
+var outboxEnabled = builder.Configuration.GetValue("Outbox:Enabled", true);
 
 builder.Services.AddDbContext<IAppDbContext, AppDbContext>(options =>
     options.UseNpgsql(connectionString));
+builder.Services.Configure<OutboxOptions>(builder.Configuration.GetSection("Outbox"));
+
+if (outboxEnabled && !string.IsNullOrWhiteSpace(remoteConnectionString))
+{
+    builder.Services.AddDbContext<RemoteDbContext>(options =>
+        options.UseNpgsql(remoteConnectionString));
+    builder.Services.AddHostedService<OutboxProcessor>();
+}
 
 // Global Exception Handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
