@@ -173,7 +173,7 @@ public class PlugsService
         plug.Timeout = null;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return new DeleteTimeoutResponse() { Message = $"Successfully added timeout of {plug.Timeout} to plug {plug.Id}" };
+        return new DeleteTimeoutResponse() { Message = $"Successfully deleted timeout of plug {plug.Id}" };
     }
 
     public async Task<GetSchedulesResponse> GetSchedules(GetSchedulesRequest request, CancellationToken cancellationToken)

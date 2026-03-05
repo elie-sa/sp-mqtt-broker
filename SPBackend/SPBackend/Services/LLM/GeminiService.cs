@@ -2,7 +2,6 @@ using System.Text.Json;
 using Google.GenAI;
 using Google.GenAI.Types;
 using SPBackend.Requests.Queries.GetLlmChat;
-using SPBackend.Services.LLM.Tools;
 
 namespace SPBackend.Services.LLM;
 
@@ -20,7 +19,7 @@ public class GeminiService
     )
     {
         var response = await _client.Models.GenerateContentAsync(
-            model: "gemini-3-flash-preview",
+            model: "gemini-2.5-flash", // models: gemini-3-flash-preview, gemini-2.5-flash, gemini-2.5-flash-lite
             contents: conversation,
             config: config
         );
@@ -28,25 +27,22 @@ public class GeminiService
     }
     
     private readonly Client _client;
-    private readonly PowerSourceTools _powerSourceTools;
+    private readonly LlmFunctionRouter _functionRouter;
     private readonly List<Content> _conversation = new(); 
     
-    public GeminiService(IConfiguration  configuration, PowerSourceTools powerSourceTools)
+    public GeminiService(IConfiguration  configuration, LlmFunctionRouter functionRouter)
     {
         var apiKey = configuration["Gemini:ApiKey"]
                      ?? throw new Exception("Gemini API key not found");
         _client = new Client(apiKey: apiKey);
-        _powerSourceTools = powerSourceTools;
+        _functionRouter = functionRouter;
     }
     
     public async Task<GetLlmChatResponse> GetResponse(string prompt)
     {
         var config = new GenerateContentConfig
         {
-            Tools = new List<Tool>
-            {
-                PowerSourceTools.GetToolDefinition()
-            },
+            Tools = LlmToolDefinitions.AllTools,
             ToolConfig = new ToolConfig
             {
                 FunctionCallingConfig = new FunctionCallingConfig
@@ -82,8 +78,7 @@ public class GeminiService
         }
         
         // Execute the tool and add it to the conversation (referred to in the previous function call)
-        
-        var toolResult = await _powerSourceTools.ExecuteAsync(functionCall.Name);
+        var toolResult = await _functionRouter.ExecuteFunction(functionCall.Name, functionCall.Args);
         var toolContent = new Content
         {
             Role = "tool",
@@ -93,15 +88,29 @@ public class GeminiService
                 {
                     FunctionResponse = new FunctionResponse
                     {
+                        Id = functionCall.Id, 
                         Name = functionCall.Name,
-                        Response = ToDictionary(toolResult)
+                        Response = ToDictionary(new
+                        {
+                            message = toolResult.DirectMessage,
+                            data = toolResult.State
+                        })
                     }
                 }
             }
         };
         _conversation.Add(toolContent);
 
+        if (!toolResult.RequiresModel)
+        {
+            return new GetLlmChatResponse
+            {
+                Answer = toolResult.DirectMessage
+            };
+        }
+
         var finalResponse = await GenerateModelContentAsync(_conversation, config);
+        _conversation.Add(finalResponse);
 
         return new GetLlmChatResponse
         {
