@@ -7,6 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Google.GenAI" Version="1.1.0" />
         <PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
         <PackageReference Include="Hangfire.MemoryStorage" Version="1.8.0" />
         <PackageReference Include="Hangfire.SqlServer" Version="1.8.23" />

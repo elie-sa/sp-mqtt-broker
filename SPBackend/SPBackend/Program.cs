@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MQTTnet;
+using MQTTnet.Client;
 using SPBackend.Data;
 using SPBackend.Middleware.Exceptions;
 using SPBackend.Services.CurrentUser;
@@ -11,8 +13,40 @@ using SPBackend.Services.Mains;
 using SPBackend.Services.Mqtt;
 using SPBackend.Services.Plugs;
 using SPBackend.Services.Rooms;
+using SPBackend.Services.LLM;
+using SPBackend.Services.Notifications;
+using System.Net;
+using System.Net.Sockets;
+
+static string GetLocalIpv4()
+{
+    return Dns.GetHostEntry(Dns.GetHostName())
+        .AddressList
+        .First(ip =>
+            ip.AddressFamily == AddressFamily.InterNetwork &&
+            !IPAddress.IsLoopback(ip))
+        .ToString();
+}
 
 var builder = WebApplication.CreateBuilder(args);
+
+var localIp = GetLocalIpv4();
+
+var keycloakIssuer = $"http://{localIp}:8080/realms/local";
+var keycloakMetadataUrl = $"{keycloakIssuer}/.well-known/openid-configuration";
+var keycloakAuthorizationUrl = $"{keycloakIssuer}/protocol/openid-connect/auth";
+
+builder.Services
+    .AddAuthentication("Bearer")
+    .AddJwtBearer("Bearer", options =>
+    {
+        options.Authority = keycloakIssuer;
+        options.MetadataAddress = keycloakMetadataUrl;
+        options.Audience = "account";
+        options.RequireHttpsMetadata = false;
+    });
+
+Console.WriteLine($"[DEV] Using Keycloak issuer: {keycloakIssuer}");
 
 builder.Services.AddControllers();
 
@@ -29,7 +63,7 @@ builder.Services.AddSwaggerGen(c =>
         {
             Implicit = new OpenApiOAuthFlow
             {
-                AuthorizationUrl = new Uri(builder.Configuration["Keycloak:AuthorizationUrl"]),
+                AuthorizationUrl = new Uri(keycloakAuthorizationUrl),
                 Scopes = new Dictionary<string, string>
                 {
                     ["openid"] = "OpenID",
@@ -56,6 +90,10 @@ builder.Services.AddHostedService<MqttHostedService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
+// Gemini Integration
+builder.Services.AddSingleton<GeminiService>();
+builder.Services.AddSingleton<LlmFunctionRouter>();
+
 builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
@@ -73,43 +111,43 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddScoped<PowerSourceService>();
 builder.Services.AddScoped<RoomsService>();
 builder.Services.AddScoped<PlugsService>();
-builder.Services.AddScoped<ScheduleJobService>();
-builder.Services.AddHostedService<ScheduleHangfireBootstrapper>();
+builder.Services.AddScoped<NotificationService>(); // TODO: Double check if scoped or singleton
 
-//Adding Hangfire
+// Adding Hangfire
 builder.Services.AddHangfire(config =>
     config.UseSimpleAssemblyNameTypeSerializer()
         .UseRecommendedSerializerSettings()
         .UseMemoryStorage());
 builder.Services.AddHangfireServer();
 
-// Adding authentication
-builder.Services.AddAuthorization();
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.RequireHttpsMetadata = false;
-        options.Audience = builder.Configuration["Authentication:Audience"];
-        options.MetadataAddress = builder.Configuration["Authentication:MetadataAddress"];
-         
+// Allow all frontend endpoints
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
 
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidIssuer = builder.Configuration["Authentication:ValidIssuer"]
-        };
-    });
+builder.WebHost.UseUrls("http://0.0.0.0:5000");
 
 var app = builder.Build();
-app.UseRouting();
+
+app.UseCors("AllowAll");
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseExceptionHandler(_ => { });
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseExceptionHandler(options => {});
 
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
-app.UseAuthorization();
+app.UseAuthorization(); 
 
 app.UseHangfireDashboard("/hangfire");
 
@@ -117,7 +155,7 @@ app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
 {
-    var db = (AppDbContext)scope.ServiceProvider.GetRequiredService<IAppDbContext>();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
 }
 

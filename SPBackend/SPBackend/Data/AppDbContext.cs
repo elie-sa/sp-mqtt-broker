@@ -24,6 +24,7 @@ public class AppDbContext: DbContext, IAppDbContext
     public DbSet<User> Users { get; set; }
     public DbSet<Policy> Policies { get; set; }
     public DbSet<PlugPolicy> PlugPolicies { get; set; }
+    public DbSet<NotificationToken>  NotificationTokens { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

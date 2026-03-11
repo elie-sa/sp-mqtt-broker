@@ -18,6 +18,7 @@ public interface IAppDbContext
     public DbSet<User> Users { get; set; }
     public DbSet<Policy> Policies { get; set; }
     public DbSet<PlugPolicy> PlugPolicies { get; set; }
+    public DbSet<NotificationToken> NotificationTokens { get; set; }
     
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     int SaveChanges();

@@ -6,4 +6,5 @@ public class User
     public string KeyCloakId { get; set; }
     public long HouseholdId { get; set; }
     public Household Household { get; set; }
+    public ICollection<NotificationToken> NotificationTokens { get; set; }
 }
