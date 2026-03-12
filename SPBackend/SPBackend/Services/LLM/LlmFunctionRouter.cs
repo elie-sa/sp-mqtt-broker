@@ -1,4 +1,3 @@
-using Newtonsoft.Json;
 using SPBackend.Requests.Commands.AddPolicy;
 using SPBackend.Requests.Commands.AddSchedule;
 using SPBackend.Requests.Queries.GetAllPlugs;

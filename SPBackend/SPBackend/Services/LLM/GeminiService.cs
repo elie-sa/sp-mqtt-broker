@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Google.GenAI;
 using Google.GenAI.Types;
-using SPBackend.Requests.Queries.GetLlmChat;
+using SPBackend.Requests.Commands.SendLlmChat;
 
 namespace SPBackend.Services.LLM;
 
@@ -14,32 +14,35 @@ public class GeminiService
     }
     
     private async Task<Content> GenerateModelContentAsync(
-        List<Content> conversation,
-        GenerateContentConfig config
+        GenerateContentConfig config,
+        string sessionId
     )
     {
         var response = await _client.Models.GenerateContentAsync(
             model: "gemini-2.5-flash", // models: gemini-3-flash-preview, gemini-2.5-flash, gemini-2.5-flash-lite
-            contents: conversation,
+            contents: _conversation[sessionId],
             config: config
         );
         return response.Candidates[0].Content;
     }
     
     private readonly Client _client;
-    private readonly LlmFunctionRouter _functionRouter;
-    private readonly List<Content> _conversation = new(); 
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly Dictionary<string, List<Content>> _conversation = new(); 
     
-    public GeminiService(IConfiguration  configuration, LlmFunctionRouter functionRouter)
+    public GeminiService(IConfiguration  configuration, IServiceScopeFactory scopeFactory)
     {
         var apiKey = configuration["Gemini:ApiKey"]
                      ?? throw new Exception("Gemini API key not found");
         _client = new Client(apiKey: apiKey);
-        _functionRouter = functionRouter;
+        _scopeFactory = scopeFactory;
     }
     
-    public async Task<GetLlmChatResponse> GetResponse(string prompt)
+    public async Task<SendLlmChatResponse> GetResponse(SendLlmChatRequest request)
     {
+        var prompt = request.Prompt;
+        var sessionId = request.SessionId;
+        
         var config = new GenerateContentConfig
         {
             Tools = LlmToolDefinitions.AllTools,
@@ -61,24 +64,33 @@ public class GeminiService
                 new Part { Text = prompt }
             }
         };
-        _conversation.Add(userContent);
+        
+        if (!_conversation.ContainsKey(sessionId))
+        {
+            _conversation[sessionId] = new List<Content>();
+        }
+        
+        _conversation[sessionId].Add(userContent);
 
         // Get the prompt response
-        var firstModelContent = await GenerateModelContentAsync(_conversation, config);
-        _conversation.Add(firstModelContent);
+        var firstModelContent = await GenerateModelContentAsync(config,  sessionId);
+        _conversation[sessionId].Add(firstModelContent);
         
         // Check if any function call is necessary
         var functionCall = firstModelContent.Parts!.FirstOrDefault(p => p.FunctionCall != null)?.FunctionCall;
         if (functionCall is null)
         {
-            return new GetLlmChatResponse
+            return new SendLlmChatResponse
             {
                 Answer = firstModelContent.Parts![0].Text
             };
         }
         
         // Execute the tool and add it to the conversation (referred to in the previous function call)
-        var toolResult = await _functionRouter.ExecuteFunction(functionCall.Name, functionCall.Args);
+        using var scope = _scopeFactory.CreateScope();
+        var functionRouter = scope.ServiceProvider.GetRequiredService<LlmFunctionRouter>();
+        
+        var toolResult = await functionRouter.ExecuteFunction(functionCall.Name, functionCall.Args);
         var toolContent = new Content
         {
             Role = "tool",
@@ -99,20 +111,20 @@ public class GeminiService
                 }
             }
         };
-        _conversation.Add(toolContent);
+        _conversation[sessionId].Add(toolContent);
 
         if (!toolResult.RequiresModel)
         {
-            return new GetLlmChatResponse
+            return new SendLlmChatResponse
             {
                 Answer = toolResult.DirectMessage
             };
         }
 
-        var finalResponse = await GenerateModelContentAsync(_conversation, config);
-        _conversation.Add(finalResponse);
+        var finalResponse = await GenerateModelContentAsync(config, sessionId);
+        _conversation[sessionId].Add(finalResponse);
 
-        return new GetLlmChatResponse
+        return new SendLlmChatResponse
         {
             Answer = finalResponse.Parts[0].Text
         };

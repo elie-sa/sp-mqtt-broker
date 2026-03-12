@@ -92,7 +92,7 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
 // Gemini Integration
 builder.Services.AddSingleton<GeminiService>();
-builder.Services.AddSingleton<LlmFunctionRouter>();
+builder.Services.AddScoped<LlmFunctionRouter>();
 
 builder.Services.AddMediatR(cfg =>
 {

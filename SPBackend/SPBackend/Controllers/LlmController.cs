@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SPBackend.Requests.Queries.GetLlmChat;
+using SPBackend.Requests.Commands.SendLlmChat;
 
 namespace SPBackend.Controllers;
 
@@ -18,7 +18,7 @@ public class LlmController : ControllerBase
 
     [Authorize]
     [HttpPost("chat")]
-    public async Task<ActionResult<GetLlmChatResponse>> Chat([FromBody] GetLlmChatRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<SendLlmChatResponse>> Chat([FromBody] SendLlmChatRequest request, CancellationToken cancellationToken)
     {
         return Ok(await _mediator.Send(request, cancellationToken));
     }
