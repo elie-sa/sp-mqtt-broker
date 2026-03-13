@@ -2,7 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
 using SPBackend.Models;
 using SPBackend.Requests.Commands.AddNotificationToken;
+using SPBackend.Requests.Commands.SendNotification;
 using SPBackend.Services.CurrentUser;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using SPBackend.DTOs;
 
 namespace SPBackend.Services.Notifications;
 
@@ -37,5 +42,33 @@ public class NotificationService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new AddNotificationTokenResponse() { Message = "Successfully added token." };
+    }
+
+    public async Task<SendNotificationResponse> SendNotification(SendNotificationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var client = new HttpClient();
+        
+        client.DefaultRequestHeaders.Add("Accept", "application/json");
+        
+        var json = JsonSerializer.Serialize(request);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("https://exp.host/--/api/v2/push/send", content, cancellationToken);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new Exception($"Expo push request failed: {response.StatusCode}");
+        }
+        
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        var ticketResponse = JsonSerializer.Deserialize<ExpoPushTicketResponseDto>(responseBody,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        if (ticketResponse.Data.Status == "error")
+        {
+            throw new Exception(ticketResponse.Data.Message); 
+        }
+        
+        return new SendNotificationResponse() { Message = "Successfully sent the notification." };
     }
 }

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SPBackend.Requests.Commands.AddNotificationToken;
+using SPBackend.Requests.Commands.SendNotification;
 
 namespace SPBackend.Controllers;
 
@@ -18,8 +19,15 @@ public class NotificationsController: ControllerBase
 
     [Authorize]
     [HttpPost("token")]
-    // TODO: check FromQuery or FromBody better?
-    public async Task<IActionResult> AddNotificationToken([FromQuery] AddNotificationTokenRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> AddNotificationToken([FromBody] AddNotificationTokenRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(request, cancellationToken));
+    }
+
+    [Authorize]
+    [HttpPost("send")]
+    public async Task<IActionResult> SendNotification([FromBody] SendNotificationRequest request,
+        CancellationToken cancellationToken)
     {
         return Ok(await _mediator.Send(request, cancellationToken));
     }
