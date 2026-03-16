@@ -25,6 +25,7 @@
 
     <ItemGroup>
       <Folder Include="Requests\" />
+      <Folder Include="Services\Mqtt\" />
     </ItemGroup>
 
     <ItemGroup>

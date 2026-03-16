@@ -7,15 +7,20 @@ using Microsoft.OpenApi.Models;
 using SPBackend.Data;
 using SPBackend.Middleware.Exceptions;
 using SPBackend.Services.CurrentUser;
-using SPBackend.Services.Mains;
-using SPBackend.Services.Mqtt;
+using SPBackend.Services.Commands;
+using SPBackend.Services.Mains; 
 using SPBackend.Services.Outbox;
 using SPBackend.Services.Plugs;
 using SPBackend.Services.Rooms;
+using SPBackend.Filters;
+using SPBackend.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.AddService<CommandDispatchFilter>();
+});
 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
@@ -52,10 +57,13 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddSingleton<IMqttService, MqttService>();
-builder.Services.AddHostedService<MqttHostedService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddSignalR();
+builder.Services.Configure<CommandInboxOptions>(builder.Configuration.GetSection("CommandInbox"));
+builder.Services.AddSingleton<CommandAckTracker>();
+builder.Services.AddScoped<CommandDispatcher>();
+builder.Services.AddScoped<CommandDispatchFilter>();
 
 builder.Services.AddMediatR(cfg =>
 {
@@ -125,6 +133,7 @@ app.UseAuthorization();
 app.UseHangfireDashboard("/hangfire");
 
 app.MapControllers();
+app.MapHub<CommandsHub>("/hubs/commands");
 
 using (var scope = app.Services.CreateScope())
 {

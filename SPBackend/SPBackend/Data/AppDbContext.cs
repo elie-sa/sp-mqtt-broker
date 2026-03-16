@@ -28,6 +28,7 @@ public class AppDbContext: DbContext, IAppDbContext
     public DbSet<User> Users { get; set; }
     public DbSet<Policy> Policies { get; set; }
     public DbSet<PlugPolicy> PlugPolicies { get; set; }
+    public DbSet<CommandMessage> Commands { get; set; }
     public DbSet<OutboxMessage> OutboxMessages { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -39,6 +40,15 @@ public class AppDbContext: DbContext, IAppDbContext
             entity.Property(x => x.Payload).IsRequired();
             entity.HasIndex(x => x.ProcessedAtUtc);
             entity.HasIndex(x => x.LastAttemptAtUtc);
+        });
+
+        modelBuilder.Entity<CommandMessage>(entity =>
+        {
+            entity.Property(x => x.HttpMethod).IsRequired();
+            entity.Property(x => x.Path).IsRequired();
+            entity.Property(x => x.Payload).IsRequired();
+            entity.HasIndex(x => x.CreatedAtUtc);
+            entity.HasIndex(x => x.AcknowledgedAtUtc);
         });
     }
 
