@@ -12,14 +12,19 @@ namespace SPBackend.Services.Mqtt;
 public class MqttService : IMqttService
 {
     private const double MinimumConsumptionThreshold = 5;
+    private const string PowerSourceTopic = "home/powersource";
+    private const string MainsConsumptionTopic = "home/mains/consumption";
     private readonly IMqttClient _client;
     private readonly MqttClientOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
     private bool _isSubscribed;
+    private long? _currentPowerSourceId;
 
     private static readonly string[] SubscriptionTopics =
     [
-        "home/plugs/consumptions"
+        "home/plugs/consumptions",
+        PowerSourceTopic,
+        MainsConsumptionTopic
     ];
 
     public MqttService(IServiceScopeFactory scopeFactory)
@@ -86,13 +91,27 @@ public class MqttService : IMqttService
         var topic = e.ApplicationMessage.Topic ?? string.Empty;
         var payload = Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment);
 
-        var isBatch = TryBuildBatchConsumptions(payload, out var batchConsumptions, out var batchPlugStates);
+        if (string.Equals(topic, PowerSourceTopic, StringComparison.OrdinalIgnoreCase))
+        {
+            await HandlePowerSourceMessageAsync(payload);
+            return;
+        }
+
+        if (string.Equals(topic, MainsConsumptionTopic, StringComparison.OrdinalIgnoreCase))
+        {
+            await HandleMainsConsumptionMessageAsync(payload);
+            return;
+        }
+
+        var isBatch = TryBuildBatchConsumptions(payload, out var batchConsumptions, out var batchPlugStates, out var batchTemperatures);
         Consumption? singleConsumption = null;
+        double? singleTemperature = null;
         var isSingle = false;
 
-        if (!isBatch && TryBuildConsumption(topic, payload, out var parsedSingleConsumption))
+        if (!isBatch && TryBuildConsumption(topic, payload, out var parsedSingleConsumption, out var parsedSingleTemperature))
         {
             singleConsumption = parsedSingleConsumption;
+            singleTemperature = parsedSingleTemperature;
             isSingle = true;
         }
 
@@ -112,7 +131,8 @@ public class MqttService : IMqttService
                 return;
             }
 
-            await ApplyConsumptionsAsync(dbContext, batchConsumptions, batchPlugStates);
+            await ApplyConsumptionsAsync(dbContext, batchConsumptions, batchPlugStates, batchTemperatures);
+            await EvaluateTemperaturePoliciesAsync(dbContext, batchTemperatures);
             Console.WriteLine($"Saved {batchConsumptions.Count} consumptions from batch on {topic}");
             return;
         }
@@ -124,16 +144,227 @@ public class MqttService : IMqttService
                 [singleConsumption.PlugId] = false
             };
 
-            await ApplyConsumptionsAsync(dbContext, Array.Empty<Consumption>(), plugStates);
+            var tempUpdates = new Dictionary<long, double>();
+            if (singleTemperature.HasValue)
+            {
+                tempUpdates[singleConsumption.PlugId] = singleTemperature.Value;
+            }
+
+            await ApplyConsumptionsAsync(dbContext, Array.Empty<Consumption>(), plugStates, tempUpdates);
+            await EvaluateTemperaturePoliciesAsync(dbContext, tempUpdates);
             Console.WriteLine($"Marked plug {singleConsumption.PlugId} off due to low consumption on {topic}");
             return;
         }
 
-        await ApplyConsumptionsAsync(dbContext, [singleConsumption], new Dictionary<long, bool>());
+        var temperatures = new Dictionary<long, double>();
+        if (singleTemperature.HasValue)
+        {
+            temperatures[singleConsumption.PlugId] = singleTemperature.Value;
+        }
+
+        await ApplyConsumptionsAsync(dbContext, [singleConsumption], new Dictionary<long, bool>(), temperatures);
+        await EvaluateTemperaturePoliciesAsync(dbContext, temperatures);
         Console.WriteLine($"Saved consumption {singleConsumption.TotalEnergy} for plug {singleConsumption.PlugId} on {topic}");
     }
 
-    private static async Task ApplyConsumptionsAsync(IAppDbContext dbContext, IReadOnlyList<Consumption> consumptions, IReadOnlyDictionary<long, bool> plugStates)
+    private async Task HandlePowerSourceMessageAsync(string payload)
+    {
+        if (!TryParsePowerSourceId(payload, out var powerSourceId))
+        {
+            Console.WriteLine($"Ignored power source payload {payload}");
+            return;
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
+
+        var latestMainsLog = await dbContext.MainsLogs
+            .OrderByDescending(x => x.Time)
+            .FirstOrDefaultAsync();
+
+        _currentPowerSourceId = powerSourceId;
+
+        if (latestMainsLog == null)
+        {
+            Console.WriteLine("No mains log available to update power source.");
+            return;
+        }
+
+        if (latestMainsLog.PowerSourceId == powerSourceId)
+        {
+            return;
+        }
+
+        latestMainsLog.PowerSourceId = powerSourceId;
+
+        var policies = await dbContext.Policies
+            .Include(p => p.PlugPolicies)
+            .ThenInclude(pp => pp.Plug)
+            .Where(p => p.IsActive && p.PowerSourceId == powerSourceId)
+            .ToListAsync();
+
+        if (policies.Count == 0)
+        {
+            await dbContext.SaveChangesAsync();
+            return;
+        }
+
+        var plugIds = policies
+            .SelectMany(p => p.PlugPolicies)
+            .Select(pp => pp.PlugId)
+            .Distinct()
+            .ToList();
+
+        var recentConsumptions = await dbContext.RecentConsumptions
+            .Where(rc => plugIds.Contains(rc.PlugId))
+            .ToDictionaryAsync(rc => rc.PlugId);
+
+        foreach (var policy in policies)
+        {
+            var requiresTemp = policy.TempGreaterThan != null || policy.TempLessThan != null;
+
+            foreach (var plugPolicy in policy.PlugPolicies)
+            {
+                if (requiresTemp)
+                {
+                    if (!recentConsumptions.TryGetValue(plugPolicy.PlugId, out var recent) || recent.Temperature == null)
+                    {
+                        continue;
+                    }
+
+                    var temp = recent.Temperature.Value;
+                    if (policy.TempGreaterThan != null && temp <= policy.TempGreaterThan.Value)
+                    {
+                        continue;
+                    }
+
+                    if (policy.TempLessThan != null && temp >= policy.TempLessThan.Value)
+                    {
+                        continue;
+                    }
+                }
+
+                await PublishAsync($"home/plug/{plugPolicy.PlugId}", plugPolicy.SetStatus ? "ON" : "OFF");
+
+                if (plugPolicy.Plug != null)
+                {
+                    plugPolicy.Plug.IsOn = plugPolicy.SetStatus;
+                }
+            }
+        }
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private async Task EvaluateTemperaturePoliciesAsync(IAppDbContext dbContext, IReadOnlyDictionary<long, double> temperatures)
+    {
+        if (temperatures.Count == 0)
+        {
+            return;
+        }
+
+        var currentPowerSourceId = await dbContext.MainsLogs
+            .OrderByDescending(x => x.Time)
+            .Select(x => (long?)x.PowerSourceId)
+            .FirstOrDefaultAsync();
+
+        var plugIds = temperatures.Keys.ToList();
+        var plugPolicies = await dbContext.PlugPolicies
+            .Include(pp => pp.Policy)
+            .Include(pp => pp.Plug)
+            .Where(pp =>
+                plugIds.Contains(pp.PlugId) &&
+                pp.Policy.IsActive &&
+                (pp.Policy.TempGreaterThan != null || pp.Policy.TempLessThan != null))
+            .ToListAsync();
+
+        foreach (var plugPolicy in plugPolicies)
+        {
+            if (!temperatures.TryGetValue(plugPolicy.PlugId, out var temperature))
+            {
+                continue;
+            }
+
+            var policy = plugPolicy.Policy;
+            if (policy.PowerSourceId != null && policy.PowerSourceId != currentPowerSourceId)
+            {
+                continue;
+            }
+
+            if (policy.TempGreaterThan != null && temperature <= policy.TempGreaterThan.Value)
+            {
+                continue;
+            }
+
+            if (policy.TempLessThan != null && temperature >= policy.TempLessThan.Value)
+            {
+                continue;
+            }
+
+            await PublishAsync($"home/plug/{plugPolicy.PlugId}", plugPolicy.SetStatus ? "ON" : "OFF");
+
+            if (plugPolicy.Plug != null)
+            {
+                plugPolicy.Plug.IsOn = plugPolicy.SetStatus;
+            }
+        }
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private async Task HandleMainsConsumptionMessageAsync(string payload)
+    {
+        if (!TryBuildMainsConsumption(payload, out var voltage, out var amperage, out var time, out var payloadPowerSourceId))
+        {
+            Console.WriteLine($"Ignored mains consumption payload {payload}");
+            return;
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
+
+        var latestMainsLog = await dbContext.MainsLogs
+            .OrderByDescending(x => x.Time)
+            .FirstOrDefaultAsync();
+
+        var powerSourceId = payloadPowerSourceId ?? _currentPowerSourceId ?? latestMainsLog?.PowerSourceId;
+        if (powerSourceId == null)
+        {
+            Console.WriteLine("No power source available for mains consumption payload.");
+            return;
+        }
+
+        long? householdId = null;
+        var powerSource = await dbContext.PowerSources.FirstOrDefaultAsync(x => x.Id == powerSourceId.Value);
+        if (powerSource != null)
+        {
+            householdId = powerSource.HouseholdId;
+        }
+        else if (latestMainsLog != null)
+        {
+            householdId = latestMainsLog.HouseholdId;
+        }
+
+        if (householdId == null)
+        {
+            Console.WriteLine("No household available for mains consumption payload.");
+            return;
+        }
+
+        var mainsLog = new MainsLog
+        {
+            Time = time,
+            Voltage = voltage,
+            Amperage = amperage,
+            PowerSourceId = powerSourceId.Value,
+            HouseholdId = householdId.Value
+        };
+
+        dbContext.MainsLogs.Add(mainsLog);
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task ApplyConsumptionsAsync(IAppDbContext dbContext, IReadOnlyList<Consumption> consumptions, IReadOnlyDictionary<long, bool> plugStates, IReadOnlyDictionary<long, double> temperatures)
     {
         foreach (var plugState in plugStates)
         {
@@ -184,15 +415,21 @@ public class MqttService : IMqttService
                 recent.Time = consumption.Time;
                 recent.TotalEnergy = consumption.TotalEnergy;
             }
+
+            if (temperatures.TryGetValue(consumption.PlugId, out var temperature))
+            {
+                recent.Temperature = temperature;
+            }
         }
 
         await dbContext.SaveChangesAsync();
     }
 
-    private static bool TryBuildBatchConsumptions(string payload, out List<Consumption> consumptions, out Dictionary<long, bool> plugStates)
+    private static bool TryBuildBatchConsumptions(string payload, out List<Consumption> consumptions, out Dictionary<long, bool> plugStates, out Dictionary<long, double> temperatures)
     {
         consumptions = new List<Consumption>();
         plugStates = new Dictionary<long, bool>();
+        temperatures = new Dictionary<long, double>();
 
         if (string.IsNullOrWhiteSpace(payload))
         {
@@ -242,6 +479,11 @@ public class MqttService : IMqttService
                     continue;
                 }
 
+                if (TryGetDoubleProperty(plugElement, ["temperature", "temp", "t"], out var parsedTemperature))
+                {
+                    temperatures[(long)plugId] = parsedTemperature;
+                }
+
                 if (totalEnergy < MinimumConsumptionThreshold)
                 {
                     plugStates[(long)plugId] = false;
@@ -269,11 +511,12 @@ public class MqttService : IMqttService
         return consumptions.Count > 0 || plugStates.Count > 0;
     }
 
-    private static bool TryBuildConsumption(string topic, string payload, out Consumption consumption)
+    private static bool TryBuildConsumption(string topic, string payload, out Consumption consumption, out double? temperature)
     {
         consumption = null!;
         long? plugId = null;
         double? totalEnergy = null;
+        temperature = null;
         DateTime? time = null;
 
         if (!string.IsNullOrWhiteSpace(topic))
@@ -309,6 +552,11 @@ public class MqttService : IMqttService
                             totalEnergy = parsedEnergy;
                         }
 
+                        if (TryGetDoubleProperty(root, ["temperature", "temp", "t"], out var parsedTemperature))
+                        {
+                            temperature = parsedTemperature;
+                        }
+
                         if (TryGetDateTimeProperty(root, ["time", "timestamp", "ts"], out var parsedTime))
                         {
                             time = parsedTime;
@@ -338,6 +586,115 @@ public class MqttService : IMqttService
         };
 
         return true;
+    }
+
+    private static bool TryParsePowerSourceId(string payload, out long powerSourceId)
+    {
+        powerSourceId = 0;
+
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return false;
+        }
+
+        var trimmed = payload.Trim();
+
+        if (trimmed.StartsWith("{", StringComparison.Ordinal) && trimmed.EndsWith("}", StringComparison.Ordinal))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(trimmed);
+                var root = document.RootElement;
+                if (root.ValueKind == JsonValueKind.Object &&
+                    TryGetDoubleProperty(root, ["powerSourceId", "power_source_id", "powerSource", "sourceId", "id"], out var parsedId))
+                {
+                    powerSourceId = (long)parsedId;
+                    return true;
+                }
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        if (long.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
+        {
+            powerSourceId = id;
+            return true;
+        }
+
+        if (TryParseDoubleFlexible(trimmed, out var parsedDouble))
+        {
+            powerSourceId = (long)parsedDouble;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryBuildMainsConsumption(string payload, out long voltage, out long amperage, out DateTime time, out long? powerSourceId)
+    {
+        voltage = 0;
+        amperage = 0;
+        time = DateTime.UtcNow;
+        powerSourceId = null;
+
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return false;
+        }
+
+        var trimmed = payload.Trim();
+
+        if (!trimmed.StartsWith("{", StringComparison.Ordinal) || !trimmed.EndsWith("}", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(trimmed);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            if (!TryGetDoubleProperty(root, ["voltage", "volt", "v"], out var parsedVoltage))
+            {
+                return false;
+            }
+
+            if (!TryGetDoubleProperty(root, ["amperage", "amp", "current", "a"], out var parsedAmperage))
+            {
+                return false;
+            }
+
+            voltage = ConvertToLong(parsedVoltage);
+            amperage = ConvertToLong(parsedAmperage);
+
+            if (TryGetDateTimeProperty(root, ["time", "timestamp", "ts"], out var parsedTime))
+            {
+                time = parsedTime;
+            }
+
+            if (TryGetDoubleProperty(root, ["powerSourceId", "power_source_id", "powerSource", "sourceId", "id"], out var parsedPowerSourceId))
+            {
+                powerSourceId = ConvertToLong(parsedPowerSourceId);
+            }
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static long ConvertToLong(double value)
+    {
+        return Convert.ToInt64(Math.Round(value, MidpointRounding.AwayFromZero));
     }
 
     private static bool TryGetBoolProperty(JsonElement root, string[] names, out bool value)

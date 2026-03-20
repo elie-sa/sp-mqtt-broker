@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SPBackend.Data;
@@ -11,9 +12,11 @@ using SPBackend.Data;
 namespace SPBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260224204221_AddTemperatureToRecentConsumption")]
+    partial class AddTemperatureToRecentConsumption
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -110,71 +113,6 @@ namespace SPBackend.Migrations
                     b.HasIndex("PowerSourceId");
 
                     b.ToTable("MainsLogs");
-                });
-
-            modelBuilder.Entity("SPBackend.Models.NotificationToken", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<long>("UserId")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("NotificationTokens");
-                    b.ToTable("MainsLogs");
-                });
-
-            modelBuilder.Entity("SPBackend.Models.OutboxMessage", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("EntityType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("LastAttemptAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LastError")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Operation")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ProcessedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("LastAttemptAtUtc");
-
-                    b.HasIndex("ProcessedAtUtc");
-
-                    b.ToTable("OutboxMessages");
                 });
 
             modelBuilder.Entity("SPBackend.Models.Plug", b =>
@@ -473,17 +411,6 @@ namespace SPBackend.Migrations
                     b.Navigation("PowerSource");
                 });
 
-            modelBuilder.Entity("SPBackend.Models.NotificationToken", b =>
-                {
-                    b.HasOne("SPBackend.Models.User", "User")
-                        .WithMany("NotificationTokens")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("SPBackend.Models.Plug", b =>
                 {
                     b.HasOne("SPBackend.Models.DeviceType", "DeviceType")
@@ -641,11 +568,6 @@ namespace SPBackend.Migrations
             modelBuilder.Entity("SPBackend.Models.Schedule", b =>
                 {
                     b.Navigation("PlugControls");
-                });
-
-            modelBuilder.Entity("SPBackend.Models.User", b =>
-                {
-                    b.Navigation("NotificationTokens");
                 });
 #pragma warning restore 612, 618
         }
