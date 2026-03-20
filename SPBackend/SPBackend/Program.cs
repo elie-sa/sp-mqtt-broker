@@ -125,7 +125,7 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddScoped<PowerSourceService>();
 builder.Services.AddScoped<RoomsService>();
 builder.Services.AddScoped<PlugsService>();
-builder.Services.AddScoped<NotificationService>(); // TODO: Double check if scoped or singleton
+builder.Services.AddScoped<NotificationService>(); 
 
 // Adding Hangfire
 builder.Services.AddHangfire(config =>
