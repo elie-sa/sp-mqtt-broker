@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SPBackend.Data;
 using SPBackend.DTOs;
+using SPBackend.Requests.Commands.UpdatePowerSourceCost;
 using SPBackend.Requests.Queries.GetAllSources;
 using SPBackend.Requests.Queries.GetGroupedPerDayRoomConsumption;
+using SPBackend.Requests.Queries.GetMonthlyConsumptionSummary;
 using SPBackend.Requests.Queries.GetPerDayRoomConsumption;
 using SPBackend.Requests.Queries.GetPlugsPerRoomOverview;
 using SPBackend.Requests.Queries.GetPowerSource;
@@ -130,5 +132,71 @@ public class PowerSourceService
             }).ToList())
         };
 
+    }
+
+    public async Task<UpdatePowerSourceCostResponse> UpdatePowerSourceCost(UpdatePowerSourceCostRequest request, CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken);
+        if (user == null) throw new ArgumentException("User not found");
+
+        var powerSource = await _dbContext.PowerSources.FirstOrDefaultAsync(
+            x => x.Id == request.PowerSourceId && x.HouseholdId == user.HouseholdId,
+            cancellationToken);
+        if (powerSource == null) throw new KeyNotFoundException("No power source was found");
+
+        powerSource.CostPerKwh = request.CostPerKwh;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new UpdatePowerSourceCostResponse()
+        {
+            Message = $"Power source {powerSource.Id} cost per kwh updated."
+        };
+    }
+
+    public async Task<GetMonthlyConsumptionSummaryResponse> GetMonthlyConsumptionSummary(CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken);
+        if (user == null) throw new ArgumentException("User not found");
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var startOfThisMonth = new DateOnly(today.Year, today.Month, 1);
+
+        var currentMonthConsumptions = await _dbContext.MainsConsumptions
+            .Include(x => x.PowerSource)
+            .Where(x => x.PowerSource.HouseholdId == user.HouseholdId
+                        && x.Time >= startOfThisMonth
+                        && x.Time <= today)
+            .ToListAsync(cancellationToken);
+
+        var totalConsumptionThisMonth = currentMonthConsumptions.Sum(x => x.Consumption)/1000;
+        var totalCostThisMonth = currentMonthConsumptions.Sum(x => x.Consumption * x.PowerSource.CostPerKwh)/1000;
+
+        var lastMonth = today.AddMonths(-1);
+        var startOfLastMonth = new DateOnly(lastMonth.Year, lastMonth.Month, 1);
+        var lastMonthDay = Math.Min(today.Day, DateTime.DaysInMonth(lastMonth.Year, lastMonth.Month));
+        var endOfLastMonthRange = new DateOnly(lastMonth.Year, lastMonth.Month, lastMonthDay);
+
+        var lastMonthConsumptions = await _dbContext.MainsConsumptions
+            .Where(x => x.PowerSource.HouseholdId == user.HouseholdId
+                        && x.Time >= startOfLastMonth
+                        && x.Time <= endOfLastMonthRange)
+            .ToListAsync(cancellationToken);
+
+        var totalConsumptionLastMonth = lastMonthConsumptions.Sum(x => x.Consumption)/1000;
+        var totalCostLastMonth = lastMonthConsumptions.Sum(x => x.Consumption * x.PowerSource.CostPerKwh)/1000;
+        double? differenceFromLastMonth = totalConsumptionLastMonth == 0
+            ? null
+            : ((totalConsumptionThisMonth - totalConsumptionLastMonth) / totalConsumptionLastMonth) * 100;
+        double? costDifferenceFromLastMonth = totalCostLastMonth == 0
+            ? null
+            : ((totalCostThisMonth - totalCostLastMonth) / totalCostLastMonth) * 100;
+
+        return new GetMonthlyConsumptionSummaryResponse()
+        {
+            TotalConsumptionThisMonth = totalConsumptionThisMonth,
+            DifferenceFromLastMonth = differenceFromLastMonth,
+            TotalCostThisMonth = totalCostThisMonth,
+            CostDifferenceFromLastMonth = costDifferenceFromLastMonth
+        };
     }
 }

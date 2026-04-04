@@ -13,6 +13,7 @@ public interface IAppDbContext
     public DbSet<Plug> Plugs { get; set; }
     public DbSet<PlugControl> PlugControls { get; set; }
     public DbSet<PowerSource> PowerSources { get; set; }
+    public DbSet<MainsConsumptions> MainsConsumptions { get; set; }
     public DbSet<Room> Rooms { get; set; }
     public DbSet<Schedule> Schedules { get; set; }
     public DbSet<User> Users { get; set; }

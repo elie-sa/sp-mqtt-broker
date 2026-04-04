@@ -19,6 +19,7 @@ public class AppDbContext: DbContext, IAppDbContext
     public DbSet<DeviceType> DeviceTypes { get; set; }
     public DbSet<Household> Households { get; set; }
     public DbSet<MainsLog> MainsLogs { get; set; }
+    public DbSet<MainsConsumptions> MainsConsumptions { get; set; }
     public DbSet<Plug> Plugs { get; set; }
     public DbSet<PlugControl> PlugControls { get; set; }
     public DbSet<PowerSource> PowerSources { get; set; }

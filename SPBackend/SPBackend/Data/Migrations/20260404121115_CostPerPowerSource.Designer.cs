@@ -12,8 +12,8 @@ using SPBackend.Data;
 namespace SPBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260311210427_AddNoticiationToken")]
-    partial class AddNoticiationToken
+    [Migration("20260404121115_CostPerPowerSource")]
+    partial class CostPerPowerSource
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -83,6 +83,30 @@ namespace SPBackend.Migrations
                     b.ToTable("Households");
                 });
 
+            modelBuilder.Entity("SPBackend.Models.MainsConsumptions", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<double>("Consumption")
+                        .HasColumnType("double precision");
+
+                    b.Property<long>("PowerSourceId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateOnly>("Time")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PowerSourceId");
+
+                    b.ToTable("MainsConsumptions");
+                });
+
             modelBuilder.Entity("SPBackend.Models.MainsLog", b =>
                 {
                     b.Property<long>("Id")
@@ -135,6 +159,48 @@ namespace SPBackend.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("NotificationTokens");
+                });
+
+            modelBuilder.Entity("SPBackend.Models.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastAttemptAtUtc");
+
+                    b.HasIndex("ProcessedAtUtc");
+
+                    b.ToTable("OutboxMessages");
                 });
 
             modelBuilder.Entity("SPBackend.Models.Plug", b =>
@@ -267,6 +333,9 @@ namespace SPBackend.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<double>("CostPerKwh")
+                        .HasColumnType("double precision");
+
                     b.Property<long>("HouseholdId")
                         .HasColumnType("bigint");
 
@@ -294,6 +363,9 @@ namespace SPBackend.Migrations
 
                     b.Property<long>("PlugId")
                         .HasColumnType("bigint");
+
+                    b.Property<double?>("Temperature")
+                        .HasColumnType("double precision");
 
                     b.Property<DateTime>("Time")
                         .HasColumnType("timestamp with time zone");
@@ -409,6 +481,17 @@ namespace SPBackend.Migrations
                         .IsRequired();
 
                     b.Navigation("Plug");
+                });
+
+            modelBuilder.Entity("SPBackend.Models.MainsConsumptions", b =>
+                {
+                    b.HasOne("SPBackend.Models.PowerSource", "PowerSource")
+                        .WithMany("Consumptions")
+                        .HasForeignKey("PowerSourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PowerSource");
                 });
 
             modelBuilder.Entity("SPBackend.Models.MainsLog", b =>
@@ -587,6 +670,8 @@ namespace SPBackend.Migrations
 
             modelBuilder.Entity("SPBackend.Models.PowerSource", b =>
                 {
+                    b.Navigation("Consumptions");
+
                     b.Navigation("Mains");
                 });
 

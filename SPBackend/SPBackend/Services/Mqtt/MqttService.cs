@@ -314,7 +314,7 @@ public class MqttService : IMqttService
 
     private async Task HandleMainsConsumptionMessageAsync(string payload)
     {
-        if (!TryBuildMainsConsumption(payload, out var voltage, out var amperage, out var time, out var payloadPowerSourceId))
+        if (!TryBuildMainsConsumption(payload, out var voltage, out var amperage, out var wattage, out var time, out var payloadPowerSourceId))
         {
             Console.WriteLine($"Ignored mains consumption payload {payload}");
             return;
@@ -359,7 +359,24 @@ public class MqttService : IMqttService
             PowerSourceId = powerSourceId.Value,
             HouseholdId = householdId.Value
         };
-
+        
+        //TODO: Check the mainslog code
+        
+        if (wattage != 0 && dbContext.MainsConsumptions.Any(x => x.PowerSourceId == powerSourceId.Value && x.Time == DateOnly.FromDateTime(time)))
+        {
+            var todayMainsConsumption = await dbContext.MainsConsumptions.FirstOrDefaultAsync(x =>
+                x.PowerSourceId == powerSourceId.Value && x.Time == DateOnly.FromDateTime(time));
+            todayMainsConsumption!.Consumption +=  wattage;
+        } else if (wattage != 0)
+        {
+            dbContext.MainsConsumptions.Add(new MainsConsumptions()
+            {
+                PowerSourceId = powerSourceId.Value,
+                Time = DateOnly.FromDateTime(time),
+                Consumption = wattage
+            });
+        }
+        
         dbContext.MainsLogs.Add(mainsLog);
         await dbContext.SaveChangesAsync();
     }
@@ -633,10 +650,11 @@ public class MqttService : IMqttService
         return false;
     }
 
-    private static bool TryBuildMainsConsumption(string payload, out long voltage, out long amperage, out DateTime time, out long? powerSourceId)
+    private static bool TryBuildMainsConsumption(string payload, out long voltage, out long amperage, out double wattage, out DateTime time, out long? powerSourceId)
     {
         voltage = 0;
         amperage = 0;
+        wattage = 0;
         time = DateTime.UtcNow;
         powerSourceId = null;
 
@@ -660,6 +678,11 @@ public class MqttService : IMqttService
             {
                 return false;
             }
+            
+            if (!TryGetDoubleProperty(root, ["power", "p", "w"], out var parsedPower))
+            {
+                return false;
+            }
 
             if (!TryGetDoubleProperty(root, ["voltage", "volt", "v"], out var parsedVoltage))
             {
@@ -673,6 +696,7 @@ public class MqttService : IMqttService
 
             voltage = ConvertToLong(parsedVoltage);
             amperage = ConvertToLong(parsedAmperage);
+            wattage = parsedPower;
 
             if (TryGetDateTimeProperty(root, ["time", "timestamp", "ts"], out var parsedTime))
             {
