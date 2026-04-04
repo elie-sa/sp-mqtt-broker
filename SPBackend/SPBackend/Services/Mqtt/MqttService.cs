@@ -188,7 +188,22 @@ public class MqttService : IMqttService
 
         if (latestMainsLog == null)
         {
-            Console.WriteLine("No mains log available to update power source.");
+            var powerSource = await dbContext.PowerSources.FirstOrDefaultAsync(x => x.Id == powerSourceId);
+            if (powerSource == null)
+            {
+                Console.WriteLine("No mains log available to update power source.");
+                return;
+            }
+
+            dbContext.PowerSourceSessions.Add(new PowerSourceSession
+            {
+                PowerSourceId = powerSourceId,
+                HouseholdId = powerSource.HouseholdId,
+                StartTime = DateTime.UtcNow,
+                EndTime = null
+            });
+
+            await dbContext.SaveChangesAsync();
             return;
         }
 
@@ -200,10 +215,32 @@ public class MqttService : IMqttService
         var previousPowerSourceId = latestMainsLog.PowerSourceId;
         latestMainsLog.PowerSourceId = powerSourceId;
 
+        var now = DateTime.UtcNow;
+        var householdId = latestMainsLog.HouseholdId;
+        var openSession = await dbContext.PowerSourceSessions
+            .OrderByDescending(x => x.StartTime)
+            .FirstOrDefaultAsync(x => x.HouseholdId == householdId && x.EndTime == null);
+
+        if (openSession != null && openSession.PowerSourceId != powerSourceId)
+        {
+            openSession.EndTime = now;
+        }
+
+        if (openSession == null || openSession.PowerSourceId != powerSourceId)
+        {
+            dbContext.PowerSourceSessions.Add(new PowerSourceSession
+            {
+                PowerSourceId = powerSourceId,
+                HouseholdId = householdId,
+                StartTime = now,
+                EndTime = null
+            });
+        }
+
         var notificationService = scope.ServiceProvider.GetRequiredService<NotificationService>();
         var previousPowerSource = await dbContext.PowerSources.FirstOrDefaultAsync(x => x.Id == previousPowerSourceId);
         var currentPowerSource = await dbContext.PowerSources.FirstOrDefaultAsync(x => x.Id == powerSourceId);
-        var householdId = currentPowerSource?.HouseholdId ?? latestMainsLog.HouseholdId;
+        householdId = currentPowerSource?.HouseholdId ?? householdId;
 
         await SendPowerSourceChangeNotificationsAsync(
             dbContext,
@@ -405,16 +442,20 @@ public class MqttService : IMqttService
             return;
         }
 
-        var mainsLog = new MainsLog
+        var mainsLog = latestMainsLog;
+        if (mainsLog == null)
         {
-            Time = time,
-            Voltage = voltage,
-            Amperage = amperage,
-            PowerSourceId = powerSourceId.Value,
-            HouseholdId = householdId.Value
-        };
-        
-        //TODO: Check the mainslog code
+            mainsLog = new MainsLog
+            {
+                HouseholdId = householdId.Value
+            };
+            dbContext.MainsLogs.Add(mainsLog);
+        }
+
+        mainsLog.Time = time;
+        mainsLog.Voltage = voltage;
+        mainsLog.Amperage = amperage;
+        mainsLog.PowerSourceId = powerSourceId.Value;
         
         if (wattage != 0 && dbContext.MainsConsumptions.Any(x => x.PowerSourceId == powerSourceId.Value && x.Time == DateOnly.FromDateTime(time)))
         {
@@ -431,12 +472,53 @@ public class MqttService : IMqttService
             });
         }
         
-        dbContext.MainsLogs.Add(mainsLog);
         await dbContext.SaveChangesAsync();
     }
 
     private static async Task ApplyConsumptionsAsync(IAppDbContext dbContext, IReadOnlyList<Consumption> consumptions, IReadOnlyDictionary<long, bool> plugStates, IReadOnlyDictionary<long, double> temperatures)
     {
+        Dictionary<long, long> householdByPlugId = new();
+        Dictionary<long, long> powerSourceByHouseholdId = new();
+        Dictionary<long, double> costPerKwhByPowerSourceId = new();
+
+        if (consumptions.Count > 0)
+        {
+            var plugIds = consumptions.Select(x => x.PlugId).Distinct().ToList();
+
+            var plugHouseholds = await dbContext.Plugs
+                .Include(p => p.Room)
+                .Where(p => plugIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Room.HouseholdId })
+                .ToListAsync();
+
+            householdByPlugId = plugHouseholds.ToDictionary(x => x.Id, x => x.HouseholdId);
+
+            var householdIds = plugHouseholds
+                .Select(x => x.HouseholdId)
+                .Distinct()
+                .ToList();
+
+            if (householdIds.Count > 0)
+            {
+                var latestLogs = await dbContext.MainsLogs
+                    .Where(l => householdIds.Contains(l.HouseholdId))
+                    .OrderByDescending(l => l.Time)
+                    .ToListAsync();
+
+                powerSourceByHouseholdId = latestLogs
+                    .GroupBy(l => l.HouseholdId)
+                    .ToDictionary(g => g.Key, g => g.First().PowerSourceId);
+
+                var powerSourceIds = powerSourceByHouseholdId.Values.Distinct().ToList();
+                if (powerSourceIds.Count > 0)
+                {
+                    costPerKwhByPowerSourceId = await dbContext.PowerSources
+                        .Where(ps => powerSourceIds.Contains(ps.Id))
+                        .ToDictionaryAsync(ps => ps.Id, ps => ps.CostPerKwh);
+                }
+            }
+        }
+
         foreach (var plugState in plugStates)
         {
             var plug = await dbContext.Plugs.FindAsync(plugState.Key);
@@ -461,12 +543,19 @@ public class MqttService : IMqttService
                 {
                     PlugId = consumption.PlugId,
                     Time = consumption.Time.Date,
-                    TotalEnergy = 0
+                    TotalEnergy = 0,
+                    TotalPrice = 0
                 };
                 dbContext.Consumptions.Add(dailyAggregate);
             }
 
             dailyAggregate.TotalEnergy += consumption.TotalEnergy;
+            if (householdByPlugId.TryGetValue(consumption.PlugId, out var householdId)
+                && powerSourceByHouseholdId.TryGetValue(householdId, out var powerSourceId)
+                && costPerKwhByPowerSourceId.TryGetValue(powerSourceId, out var costPerKwh))
+            {
+                dailyAggregate.TotalPrice += (consumption.TotalEnergy / 1000) * costPerKwh;
+            }
 
             var recent = await dbContext.RecentConsumptions
                 .FirstOrDefaultAsync(c => c.PlugId == consumption.PlugId);

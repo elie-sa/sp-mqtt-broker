@@ -23,6 +23,7 @@ public class AppDbContext: DbContext, IAppDbContext
     public DbSet<Plug> Plugs { get; set; }
     public DbSet<PlugControl> PlugControls { get; set; }
     public DbSet<PowerSource> PowerSources { get; set; }
+    public DbSet<PowerSourceSession> PowerSourceSessions { get; set; }
     public DbSet<RoomType> RoomTypes { get; set; }
     public DbSet<Room> Rooms { get; set; }
     public DbSet<Schedule> Schedules { get; set; }

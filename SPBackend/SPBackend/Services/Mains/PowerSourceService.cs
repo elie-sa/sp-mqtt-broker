@@ -8,9 +8,12 @@ using SPBackend.Requests.Commands.UpdatePowerSourceCost;
 using SPBackend.Requests.Queries.GetAllSources;
 using SPBackend.Requests.Queries.GetGroupedPerDayRoomConsumption;
 using SPBackend.Requests.Queries.GetMonthlyConsumptionSummary;
+using SPBackend.Requests.Queries.GetMonthlyPowerSourceBill;
 using SPBackend.Requests.Queries.GetPerDayRoomConsumption;
 using SPBackend.Requests.Queries.GetPlugsPerRoomOverview;
 using SPBackend.Requests.Queries.GetPowerSource;
+using SPBackend.Requests.Queries.GetWeeklyPowerSourceCosts;
+using SPBackend.Requests.Queries.GetWeeklyPowerSourceSessionHours;
 using SPBackend.Requests.Queries.GetWeeklyPowerSourceUsage;
 using SPBackend.Services.CurrentUser;
 
@@ -263,6 +266,194 @@ public class PowerSourceService
             .ToList();
 
         return response;
+    }
+
+    public async Task<GetMonthlyPowerSourceBillResponse> GetMonthlyPowerSourceBill(CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken);
+        if (user == null) throw new ArgumentException("User not found");
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var startOfThisMonth = new DateOnly(today.Year, today.Month, 1);
+
+        var powerSources = await _dbContext.PowerSources
+            .Where(x => x.HouseholdId == user.HouseholdId)
+            .ToListAsync(cancellationToken);
+
+        var monthlyConsumptions = await _dbContext.MainsConsumptions
+            .Include(x => x.PowerSource)
+            .Where(x => x.PowerSource.HouseholdId == user.HouseholdId
+                        && x.Time >= startOfThisMonth
+                        && x.Time <= today)
+            .ToListAsync(cancellationToken);
+
+        var totalsBySource = monthlyConsumptions
+            .GroupBy(x => x.PowerSourceId)
+            .Select(group => new
+            {
+                PowerSourceId = group.Key,
+                TotalWh = group.Sum(x => x.Consumption)
+            })
+            .ToDictionary(x => x.PowerSourceId, x => x.TotalWh);
+
+        var response = new GetMonthlyPowerSourceBillResponse();
+
+        response.PowerSources = powerSources
+            .Select(source =>
+            {
+                totalsBySource.TryGetValue(source.Id, out var totalWh);
+                var kwh = totalWh / 1000;
+                var cost = kwh * source.CostPerKwh;
+                return new MonthlyPowerSourceBillItem
+                {
+                    Name = source.Name,
+                    Kwh = kwh,
+                    Cost = cost
+                };
+            })
+            .OrderByDescending(x => x.Cost)
+            .ToList();
+
+        response.TotalCost = response.PowerSources.Sum(x => x.Cost);
+
+        return response;
+    }
+
+    public async Task<GetWeeklyPowerSourceCostsResponse> GetWeeklyPowerSourceCosts(CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken);
+        if (user == null) throw new ArgumentException("User not found");
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var diff = ((int)DateTime.Today.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        var startOfWeek = DateOnly.FromDateTime(DateTime.Today.AddDays(-diff));
+        var endOfWeek = startOfWeek.AddDays(6);
+
+        var powerSources = await _dbContext.PowerSources
+            .Where(x => x.HouseholdId == user.HouseholdId)
+            .ToListAsync(cancellationToken);
+
+        var weeklyConsumptions = await _dbContext.MainsConsumptions
+            .Include(x => x.PowerSource)
+            .Where(x => x.PowerSource.HouseholdId == user.HouseholdId
+                        && x.Time >= startOfWeek
+                        && x.Time <= endOfWeek)
+            .ToListAsync(cancellationToken);
+
+        var totalsByDayAndSource = weeklyConsumptions
+            .GroupBy(x => new { x.Time, x.PowerSourceId })
+            .Select(group => new
+            {
+                group.Key.Time,
+                group.Key.PowerSourceId,
+                TotalWh = group.Sum(x => x.Consumption)
+            })
+            .ToList();
+
+        var totalsLookup = totalsByDayAndSource
+            .ToDictionary(x => (x.Time, x.PowerSourceId), x => x.TotalWh);
+
+        var response = new GetWeeklyPowerSourceCostsResponse();
+
+        for (var date = startOfWeek; date <= endOfWeek; date = date.AddDays(1))
+        {
+            var dayTotals = powerSources
+                .Select(source =>
+                {
+                    totalsLookup.TryGetValue((date, source.Id), out var totalWh);
+                    var kwh = totalWh / 1000;
+                    var cost = kwh * source.CostPerKwh;
+                    return new
+                    {
+                        source.Name,
+                        Cost = cost
+                    };
+                })
+                .ToList();
+
+            var totalCost = dayTotals.Sum(x => x.Cost);
+
+            var day = new DailyPowerSourceCosts
+            {
+                Day = date.DayOfWeek.ToString(),
+                PowerSources = dayTotals
+                    .Select(x => new PowerSourceDailyCost
+                    {
+                        Name = x.Name,
+                        Cost = x.Cost
+                    })
+                    .OrderByDescending(x => x.Cost)
+                    .ToList()
+            };
+
+            response.Days.Add(day);
+        }
+
+        return response;
+    }
+
+    public async Task<GetWeeklyPowerSourceSessionHoursResponse> GetWeeklyPowerSourceSessionHours(long powerSourceId, CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken);
+        if (user == null) throw new ArgumentException("User not found");
+
+        var powerSource = await _dbContext.PowerSources
+            .FirstOrDefaultAsync(x => x.Id == powerSourceId && x.HouseholdId == user.HouseholdId, cancellationToken);
+        if (powerSource == null) throw new KeyNotFoundException("Power source not found");
+
+        var nowUtc = DateTime.UtcNow;
+        var diff = ((int)nowUtc.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        var startOfWeek = nowUtc.Date.AddDays(-diff);
+        var endExclusive = startOfWeek.AddDays(7);
+        var cappedNowUtc = nowUtc > endExclusive ? endExclusive : nowUtc;
+
+        var sessions = await _dbContext.PowerSourceSessions
+            .Where(x => x.HouseholdId == user.HouseholdId
+                        && x.PowerSourceId == powerSourceId
+                        && x.StartTime < endExclusive
+                        && (x.EndTime == null || x.EndTime > startOfWeek))
+            .OrderBy(x => x.StartTime)
+            .ToListAsync(cancellationToken);
+
+        var days = new List<DailyPowerSourceHours>(7);
+
+        for (var i = 0; i < 7; i++)
+        {
+            var dayStart = startOfWeek.AddDays(i);
+            var dayEnd = dayStart.AddDays(1);
+            var hours = 0.0;
+
+            foreach (var session in sessions)
+            {
+                var sessionStart = session.StartTime;
+                var sessionEnd = session.EndTime ?? cappedNowUtc;
+
+                if (sessionEnd <= dayStart || sessionStart >= dayEnd)
+                {
+                    continue;
+                }
+
+                var overlapStart = sessionStart > dayStart ? sessionStart : dayStart;
+                var overlapEnd = sessionEnd < dayEnd ? sessionEnd : dayEnd;
+
+                if (overlapEnd > overlapStart)
+                {
+                    hours += (overlapEnd - overlapStart).TotalHours;
+                }
+            }
+
+            days.Add(new DailyPowerSourceHours
+            {
+                Day = dayStart.DayOfWeek.ToString(),
+                Hours = Math.Round(hours, 1, MidpointRounding.AwayFromZero)
+            });
+        }
+
+        return new GetWeeklyPowerSourceSessionHoursResponse
+        {
+            PowerSourceName = powerSource.Name,
+            Days = days
+        };
     }
 
 }
