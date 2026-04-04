@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.VisualBasic.CompilerServices;
 using SPBackend.Data;
 using SPBackend.DTOs;
 using SPBackend.Requests.Commands.UpdatePowerSourceCost;
@@ -10,6 +11,7 @@ using SPBackend.Requests.Queries.GetMonthlyConsumptionSummary;
 using SPBackend.Requests.Queries.GetPerDayRoomConsumption;
 using SPBackend.Requests.Queries.GetPlugsPerRoomOverview;
 using SPBackend.Requests.Queries.GetPowerSource;
+using SPBackend.Requests.Queries.GetWeeklyPowerSourceUsage;
 using SPBackend.Services.CurrentUser;
 
 namespace SPBackend.Services.Mains;
@@ -199,4 +201,51 @@ public class PowerSourceService
             CostDifferenceFromLastMonth = costDifferenceFromLastMonth
         };
     }
+
+    public async Task<GetWeeklyPowerSourceUsageResponse> GetWeeklyPowerSourceUsage(CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken);
+        if (user == null) throw new ArgumentException("User not found");
+
+        var today = DateTime.Today;
+        var diff = ((int)today.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        var startOfWeek = DateOnly.FromDateTime(today.AddDays(-diff));
+        var endOfWeek = DateOnly.FromDateTime(today);
+
+        var weeklyConsumptions = await _dbContext.MainsConsumptions
+            .Include(x => x.PowerSource)
+            .Where(x => x.PowerSource.HouseholdId == user.HouseholdId
+                        && x.Time >= startOfWeek
+                        && x.Time <= endOfWeek)
+            .ToListAsync(cancellationToken);
+
+        var totalsBySource = weeklyConsumptions
+            .GroupBy(x => x.PowerSource)
+            .Select(group => new
+            {
+                Name = group.Key.Name,
+                Total = group.Sum(x => x.Consumption)
+            })
+            .ToList();
+
+        var totalConsumption = totalsBySource.Sum(x => x.Total);
+        var response = new GetWeeklyPowerSourceUsageResponse();
+
+        if (totalConsumption == 0)
+        {
+            return response;
+        }
+
+        response.PowerSources = totalsBySource
+            .Select(x => new PowerSourceUsagePercentage
+            {
+                Name = x.Name,
+                Percentage = (x.Total / totalConsumption) * 100
+            })
+            .OrderByDescending(x => x.Percentage)
+            .ToList();
+
+        return response;
+    }
+
 }

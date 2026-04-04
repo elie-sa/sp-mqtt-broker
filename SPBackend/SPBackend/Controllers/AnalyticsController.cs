@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SPBackend.Requests.Queries.GetMonthlyConsumptionSummary;
+using SPBackend.Requests.Queries.GetWeeklyPowerSourceUsage;
 
 namespace SPBackend.Controllers;
 
@@ -22,4 +23,12 @@ public class AnalyticsController : ControllerBase
     {
         return Ok(await _mediator.Send(new GetMonthlyConsumptionSummaryRequest(), cancellationToken));
     }
+
+    [Authorize]
+    [HttpGet("mains/weekly/percentages")]
+    public async Task<IActionResult> GetWeeklyPowerSourceUsage(CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(new GetWeeklyPowerSourceUsageRequest(), cancellationToken));
+    }
+
 }

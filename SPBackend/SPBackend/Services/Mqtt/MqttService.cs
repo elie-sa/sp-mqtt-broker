@@ -6,6 +6,8 @@ using MQTTnet;
 using MQTTnet.Client;
 using SPBackend.Data;
 using SPBackend.Models;
+using SPBackend.Requests.Commands.SendNotification;
+using SPBackend.Services.Notifications;
 
 namespace SPBackend.Services.Mqtt;
 
@@ -195,7 +197,21 @@ public class MqttService : IMqttService
             return;
         }
 
+        var previousPowerSourceId = latestMainsLog.PowerSourceId;
         latestMainsLog.PowerSourceId = powerSourceId;
+
+        var notificationService = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        var previousPowerSource = await dbContext.PowerSources.FirstOrDefaultAsync(x => x.Id == previousPowerSourceId);
+        var currentPowerSource = await dbContext.PowerSources.FirstOrDefaultAsync(x => x.Id == powerSourceId);
+        var householdId = currentPowerSource?.HouseholdId ?? latestMainsLog.HouseholdId;
+
+        await SendPowerSourceChangeNotificationsAsync(
+            dbContext,
+            notificationService,
+            householdId,
+            previousPowerSource?.Name,
+            currentPowerSource?.Name,
+            CancellationToken.None);
 
         var policies = await dbContext.Policies
             .Include(p => p.PlugPolicies)
@@ -254,6 +270,44 @@ public class MqttService : IMqttService
         }
 
         await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SendPowerSourceChangeNotificationsAsync(
+        IAppDbContext dbContext,
+        NotificationService notificationService,
+        long householdId,
+        string? previousPowerSourceName,
+        string? currentPowerSourceName,
+        CancellationToken cancellationToken)
+    {
+        var tokens = await dbContext.NotificationTokens
+            .Where(x => x.User.HouseholdId == householdId)
+            .Select(x => x.Token)
+            .ToListAsync(cancellationToken);
+
+        if (tokens.Count == 0)
+        {
+            return;
+        }
+
+        var title = "Power source changed";
+        var body = string.IsNullOrWhiteSpace(currentPowerSourceName)
+            ? "Power source updated."
+            : string.IsNullOrWhiteSpace(previousPowerSourceName)
+                ? $"Switched to {currentPowerSourceName}."
+                : $"Switched from {previousPowerSourceName} to {currentPowerSourceName}.";
+
+        foreach (var token in tokens)
+        {
+            var request = new SendNotificationRequest
+            {
+                To = token,
+                Title = title,
+                Body = body
+            };
+
+            await notificationService.SendNotification(request, cancellationToken);
+        }
     }
 
     private async Task EvaluateTemperaturePoliciesAsync(IAppDbContext dbContext, IReadOnlyDictionary<long, double> temperatures)
