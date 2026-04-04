@@ -4,6 +4,7 @@ using SPBackend.DTOs;
 using SPBackend.Models;
 using SPBackend.Requests.Queries.GetPlugsPerRoom;
 using SPBackend.Requests.Queries.GetRooms;
+using SPBackend.Requests.Queries.GetTodayRoomConsumptionSummary;
 using SPBackend.Services.CurrentUser;
 
 namespace SPBackend.Services.Rooms;
@@ -61,6 +62,59 @@ public class RoomsService
 
         return output;
     }
-    
-    
+
+    public async Task<GetTodayRoomConsumptionSummaryResponse> GetTodayRoomConsumptionSummary(CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken: cancellationToken);
+        var rooms = await _dbContext.Rooms
+            .Include(x => x.Plugs)
+            .ThenInclude(p => p.Consumptions)
+            .Where(x => x.HouseholdId == user!.HouseholdId)
+            .ToListAsync(cancellationToken);
+
+        var today = DateTime.Today.Date;
+        var roomTotals = rooms.Select(room => new
+            {
+                room.Name,
+                TotalWh = room.Plugs
+                    .SelectMany(plug => plug.Consumptions)
+                    .Where(consumption => consumption.Time.Date == today && consumption.Time.TimeOfDay == TimeSpan.Zero)
+                    .Sum(consumption => consumption.TotalEnergy)
+            })
+            .ToList();
+
+        var totalWh = roomTotals.Sum(x => x.TotalWh);
+        var response = new GetTodayRoomConsumptionSummaryResponse();
+
+        if (totalWh == 0)
+        {
+            response.Rooms = roomTotals
+                .Select(x => new RoomConsumptionSummaryItem
+                {
+                    Name = x.Name,
+                    Percentage = 0,
+                    Kwh = 0
+                })
+                .OrderByDescending(x => x.Kwh)
+                .ToList();
+
+            return response;
+        }
+
+        response.Rooms = roomTotals
+            .Select(x =>
+            {
+                var kwh = x.TotalWh / 1000;
+                return new RoomConsumptionSummaryItem
+                {
+                    Name = x.Name,
+                    Percentage = (x.TotalWh / totalWh) * 100,
+                    Kwh = kwh
+                };
+            })
+            .OrderByDescending(x => x.Kwh)
+            .ToList();
+
+        return response;
+    }
 }

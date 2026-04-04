@@ -2,6 +2,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SPBackend.Requests.Queries.GetMonthlyConsumptionSummary;
+using SPBackend.Requests.Queries.GetTodayPlugConsumptionSummary;
+using SPBackend.Requests.Queries.GetTodayRoomConsumptionSummary;
 using SPBackend.Requests.Queries.GetWeeklyPowerSourceUsage;
 
 namespace SPBackend.Controllers;
@@ -29,6 +31,20 @@ public class AnalyticsController : ControllerBase
     public async Task<IActionResult> GetWeeklyPowerSourceUsage(CancellationToken cancellationToken)
     {
         return Ok(await _mediator.Send(new GetWeeklyPowerSourceUsageRequest(), cancellationToken));
+    }
+
+    [Authorize]
+    [HttpGet("rooms/daily")]
+    public async Task<IActionResult> GetTodayRoomConsumptionSummary(CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(new GetTodayRoomConsumptionSummaryRequest(), cancellationToken));
+    }
+
+    [Authorize]
+    [HttpGet("plugs/daily")]
+    public async Task<IActionResult> GetTodayPlugConsumptionSummary(CancellationToken cancellationToken)
+    {
+        return Ok(await _mediator.Send(new GetTodayPlugConsumptionSummaryRequest(), cancellationToken));
     }
 
 }

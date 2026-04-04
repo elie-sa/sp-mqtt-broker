@@ -25,6 +25,7 @@ using SPBackend.Requests.Queries.GetScheduleDetails;
 using SPBackend.Requests.Queries.GetSchedules;
 using SPBackend.Requests.Queries.GetSchedulesByDay;
 using SPBackend.Requests.Queries.GetSchedulesNextDays;
+using SPBackend.Requests.Queries.GetTodayPlugConsumptionSummary;
 using SPBackend.Services.CurrentUser;
 using SPBackend.Services.Mqtt;
 
@@ -587,6 +588,60 @@ public class PlugsService
         };
 
         return output;
+    }
+
+    public async Task<GetTodayPlugConsumptionSummaryResponse> GetTodayPlugConsumptionSummary(CancellationToken cancellationToken)
+    {
+        var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.KeyCloakId.Equals(_currentUser.Sub), cancellationToken: cancellationToken);
+        var plugs = await _dbContext.Plugs
+            .Include(x => x.Room)
+            .Include(x => x.Consumptions)
+            .Where(x => x.Room.HouseholdId == user!.HouseholdId)
+            .ToListAsync(cancellationToken);
+
+        var today = DateTime.Today.Date;
+        var plugTotals = plugs.Select(plug => new
+            {
+                plug.Name,
+                TotalWh = plug.Consumptions
+                    .Where(consumption => consumption.Time.Date == today && consumption.Time.TimeOfDay == TimeSpan.Zero)
+                    .Sum(consumption => consumption.TotalEnergy)
+            })
+            .ToList();
+
+        var totalWh = plugTotals.Sum(x => x.TotalWh);
+        var response = new GetTodayPlugConsumptionSummaryResponse();
+
+        if (totalWh == 0)
+        {
+            response.Plugs = plugTotals
+                .Select(x => new PlugConsumptionSummaryItem
+                {
+                    Name = x.Name,
+                    Percentage = 0,
+                    Kwh = 0
+                })
+                .OrderByDescending(x => x.Kwh)
+                .ToList();
+
+            return response;
+        }
+
+        response.Plugs = plugTotals
+            .Select(x =>
+            {
+                var kwh = x.TotalWh / 1000;
+                return new PlugConsumptionSummaryItem
+                {
+                    Name = x.Name,
+                    Percentage = (x.TotalWh / totalWh) * 100,
+                    Kwh = kwh
+                };
+            })
+            .OrderByDescending(x => x.Kwh)
+            .ToList();
+
+        return response;
     }
 
     public async Task<GetSchedulesNextDaysResponse> GetSchedulesNextDays(GetSchedulesNextDaysRequest request, CancellationToken cancellationToken)
