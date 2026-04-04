@@ -242,8 +242,8 @@ public class PlugsService
         var schedule = await _dbContext.Schedules.Include(x => x.PlugControls).ThenInclude(y => y.Plug).FirstOrDefaultAsync(x => x.Id == request.ScheduleId, cancellationToken);
         if (schedule == null) throw new KeyNotFoundException("No schedule was found");
 
-        var onPlugs = schedule.PlugControls.Where(x => x.SetStatus == true).ToList();
-        var offPlugs = schedule.PlugControls.Where(x => x.SetStatus == false).ToList();
+        var onPlugs = schedule.PlugControls.Where(x => x.SetStatus).ToList();
+        var offPlugs = schedule.PlugControls.Where(x => !x.SetStatus).ToList();
         
         var response = new GetScheduleDetailsResponse()
         {

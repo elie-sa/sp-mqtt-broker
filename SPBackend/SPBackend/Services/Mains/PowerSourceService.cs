@@ -212,6 +212,10 @@ public class PowerSourceService
         var startOfWeek = DateOnly.FromDateTime(today.AddDays(-diff));
         var endOfWeek = DateOnly.FromDateTime(today);
 
+        var powerSources = await _dbContext.PowerSources
+            .Where(x => x.HouseholdId == user.HouseholdId)
+            .ToListAsync(cancellationToken);
+
         var weeklyConsumptions = await _dbContext.MainsConsumptions
             .Include(x => x.PowerSource)
             .Where(x => x.PowerSource.HouseholdId == user.HouseholdId
@@ -220,27 +224,40 @@ public class PowerSourceService
             .ToListAsync(cancellationToken);
 
         var totalsBySource = weeklyConsumptions
-            .GroupBy(x => x.PowerSource)
+            .GroupBy(x => x.PowerSourceId)
             .Select(group => new
             {
-                Name = group.Key.Name,
+                PowerSourceId = group.Key,
                 Total = group.Sum(x => x.Consumption)
             })
-            .ToList();
+            .ToDictionary(x => x.PowerSourceId, x => x.Total);
 
-        var totalConsumption = totalsBySource.Sum(x => x.Total);
+        var totalConsumption = totalsBySource.Values.Sum();
         var response = new GetWeeklyPowerSourceUsageResponse();
 
         if (totalConsumption == 0)
         {
+            response.PowerSources = powerSources
+                .Select(x => new PowerSourceUsagePercentage
+                {
+                    Name = x.Name,
+                    Percentage = 0
+                })
+                .OrderByDescending(x => x.Percentage)
+                .ToList();
+
             return response;
         }
 
-        response.PowerSources = totalsBySource
-            .Select(x => new PowerSourceUsagePercentage
+        response.PowerSources = powerSources
+            .Select(source =>
             {
-                Name = x.Name,
-                Percentage = (x.Total / totalConsumption) * 100
+                totalsBySource.TryGetValue(source.Id, out var total);
+                return new PowerSourceUsagePercentage
+                {
+                    Name = source.Name,
+                    Percentage = totalConsumption == 0 ? 0 : (total / totalConsumption) * 100
+                };
             })
             .OrderByDescending(x => x.Percentage)
             .ToList();
